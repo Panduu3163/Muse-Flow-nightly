@@ -266,7 +266,7 @@ fun NowPlayingScreen(
                     coil.compose.AsyncImage(
                         model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                             .data(track.imageUrl)
-                            .crossfade(true)
+                            
                             .build(),
                         contentDescription = "${track.title} cover art",
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
@@ -322,7 +322,7 @@ fun NowPlayingScreen(
                     Box(
                         modifier = Modifier
                             .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                            .bounceClick { likedSongsViewModel.toggle(track) }
+                            .clickable { likedSongsViewModel.toggle(track) }
                             .padding(8.dp)
                             .testTag("now_playing_heart_button")
                     ) {
@@ -376,9 +376,9 @@ fun NowPlayingScreen(
 
             // 4. Progress Seek Bar & Labels
             Column(modifier = Modifier.fillMaxWidth()) {
-                val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress, label = "progress")
+                
                 Slider(
-                    value = animatedProgress,
+                    value = progress,
                     onValueChange = onProgressChange,
                     colors = SliderDefaults.colors(
                         activeTrackColor = Color(0xFFD0BCFF),
@@ -438,7 +438,7 @@ fun NowPlayingScreen(
                 // Previous Button
                 Box(
                     modifier = Modifier
-                        .bounceClick { onPrevious() }
+                        .clickable { onPrevious() }
                         .testTag("now_playing_prev"),
                     contentAlignment = Alignment.Center
                 ) {
@@ -456,7 +456,7 @@ fun NowPlayingScreen(
                         .size(80.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFD0BCFF))
-                        .bounceClick { onPlayPauseToggle() }
+                        .clickable { onPlayPauseToggle() }
                         .testTag("now_playing_play_pause"),
                     contentAlignment = Alignment.Center
                 ) {
@@ -471,7 +471,7 @@ fun NowPlayingScreen(
                 // Next Button
                 Box(
                     modifier = Modifier
-                        .bounceClick { onNext() }
+                        .clickable { onNext() }
                         .testTag("now_playing_next"),
                     contentAlignment = Alignment.Center
                 ) {

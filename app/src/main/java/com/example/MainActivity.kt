@@ -301,11 +301,7 @@ private fun MainApp() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.HOME,
-                modifier = Modifier.fillMaxSize(),
-                enterTransition = { fadeIn(animationSpec = tween(250)) },
-                exitTransition = { fadeOut(animationSpec = tween(250)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(250)) },
-                popExitTransition = { fadeOut(animationSpec = tween(250)) }
+                modifier = Modifier.fillMaxSize()
             ) {
                 composable(Routes.HOME) {
                     Box(Modifier.padding(innerPadding)) {
@@ -358,11 +354,7 @@ private fun MainApp() {
                 }
 
                 composable(
-                    Routes.SETTINGS_ACCOUNT,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_ACCOUNT
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         AccountScreen(
@@ -372,22 +364,14 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_ACCOUNT_EDIT,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_ACCOUNT_EDIT
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         EditProfileScreen(onBack = { navController.popBackStack() })
                     }
                 }
                 composable(
-                    Routes.SETTINGS_APPEARANCE,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_APPEARANCE
                 ) {
                     val themeViewModel: ThemeViewModel = viewModel()
                     val themeState by themeViewModel.themeState.collectAsState()
@@ -406,11 +390,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_PLAYER_AUDIO,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_PLAYER_AUDIO
                 ) {
                     val appSettingsViewModel: AppSettingsViewModel = viewModel()
                     val appSettings by appSettingsViewModel.state.collectAsState()
@@ -433,11 +413,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_LYRICS,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_LYRICS
                 ) {
                     val appSettingsViewModel: AppSettingsViewModel = viewModel()
                     val appSettings by appSettingsViewModel.state.collectAsState()
@@ -450,11 +426,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_LIBRARY_PLAYLISTS,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_LIBRARY_PLAYLISTS
                 ) {
                     val appSettingsViewModel: AppSettingsViewModel = viewModel()
                     val appSettings by appSettingsViewModel.state.collectAsState()
@@ -467,55 +439,35 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_LISTEN_TOGETHER,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_LISTEN_TOGETHER
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         ListenTogetherScreen(onBack = { navController.popBackStack() })
                     }
                 }
                 composable(
-                    Routes.SETTINGS_STORAGE,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_STORAGE
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         StorageScreen(onBack = { navController.popBackStack() })
                     }
                 }
                 composable(
-                    Routes.SETTINGS_UPTIME,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_UPTIME
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         ServiceUptimeScreen(onBack = { navController.popBackStack() })
                     }
                 }
                 composable(
-                    Routes.SETTINGS_ABOUT,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_ABOUT
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         AboutScreen(onBack = { navController.popBackStack() })
                     }
                 }
                 composable(
-                    Routes.SETTINGS_THEME,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_THEME
                 ) {
                     val themeViewModel: ThemeViewModel = viewModel()
                     val themeState by themeViewModel.themeState.collectAsState()
@@ -529,11 +481,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.SETTINGS_PALETTE,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.SETTINGS_PALETTE
                 ) {
                     val themeViewModel: ThemeViewModel = viewModel()
                     val themeState by themeViewModel.themeState.collectAsState()
@@ -546,11 +494,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.ALBUM_DETAIL,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.ALBUM_DETAIL
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         selectedAlbum?.let { album ->
@@ -563,11 +507,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.ARTIST_DETAIL,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.ARTIST_DETAIL
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         selectedArtist?.let { artist ->
@@ -580,11 +520,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.PLAYLIST_DETAIL,
-                    enterTransition = settingsEnter,
-                    exitTransition = settingsExit,
-                    popEnterTransition = settingsPopEnter,
-                    popExitTransition = settingsPopExit
+                    Routes.PLAYLIST_DETAIL
                 ) {
                     Box(Modifier.padding(innerPadding)) {
                         selectedPlaylist?.let { playlist ->
@@ -597,11 +533,7 @@ private fun MainApp() {
                     }
                 }
                 composable(
-                    Routes.NOW_PLAYING,
-                    enterTransition = nowPlayingEnter,
-                    exitTransition = nowPlayingExit,
-                    popEnterTransition = nowPlayingEnter,
-                    popExitTransition = nowPlayingExit
+                    Routes.NOW_PLAYING
                 ) {
                     // Deliberately ignores innerPadding - NowPlayingScreen manages its own
                     // status/navigation bar insets and should be truly edge-to-edge, same as
@@ -700,7 +632,7 @@ fun CompactPlayer(
 
                 // Playback Control Buttons
                 Box(
-                    modifier = Modifier.size(48.dp).bounceClick { onPrevious() },
+                    modifier = Modifier.size(48.dp).clickable { onPrevious() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -712,7 +644,7 @@ fun CompactPlayer(
                 }
 
                 Box(
-                    modifier = Modifier.size(48.dp).bounceClick { onPlayPauseToggle() },
+                    modifier = Modifier.size(48.dp).clickable { onPlayPauseToggle() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -724,7 +656,7 @@ fun CompactPlayer(
                 }
 
                 Box(
-                    modifier = Modifier.size(48.dp).bounceClick { onNext() },
+                    modifier = Modifier.size(48.dp).clickable { onNext() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -746,7 +678,7 @@ fun CompactPlayer(
             }
 
             // Player Progress Bar, driven by the shared playback position
-            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), label = "compact_progress")
+            
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -756,7 +688,7 @@ fun CompactPlayer(
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth(animatedProgress)
+                        .fillMaxWidth(progress)
                         .background(
                             Brush.horizontalGradient(
                                 colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
@@ -767,3 +699,4 @@ fun CompactPlayer(
         }
     }
 }
+

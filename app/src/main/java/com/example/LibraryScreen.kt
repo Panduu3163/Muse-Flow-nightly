@@ -191,12 +191,12 @@ fun LibraryScreen(
                     }
 
                     // Playlists Grid View
-                    items(playlists, key = { it.id }) { playlist ->
+                    items(playlists) { playlist ->
                         val isRemote = playlist.remoteId != null
                         val gradientColors = MusicData.Gradients[(playlist.id % MusicData.Gradients.size.toLong()).toInt()]
                         Column(
                             modifier = Modifier
-                                .animateItem()
+                                
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {

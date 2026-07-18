@@ -361,13 +361,13 @@ fun SongsResults(
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(results, key = { it.downloadKey() }) { track ->
+            items(results) { track ->
                 val gradientColors = MusicData.Gradients[track.gradientIndex % MusicData.Gradients.size]
                 val isFromYouTube = track.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
-                        .animateItem()
+                        
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         // YouTube tracks play directly now, same as JioSaavn - PlaybackService
@@ -506,13 +506,13 @@ fun AlbumsResults(searchQuery: String, onAlbumClick: (AlbumResult) -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data, key = { it.id }) { album ->
+            items(currentState.data) { album ->
                 val gradientColors = MusicData.Gradients[(album.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = album.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
-                        .animateItem()
+                        
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onAlbumClick(album) }
@@ -624,13 +624,13 @@ fun ArtistsResults(searchQuery: String, onArtistClick: (ArtistResult) -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data, key = { it.id }) { artist ->
+            items(currentState.data) { artist ->
                 val gradientColors = MusicData.Gradients[(artist.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = artist.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
-                        .animateItem()
+                        
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onArtistClick(artist) }
@@ -734,13 +734,13 @@ fun PlaylistsResults(searchQuery: String, onPlaylistClick: (PlaylistResult) -> U
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data, key = { it.id }) { playlist ->
+            items(currentState.data) { playlist ->
                 val gradientColors = MusicData.Gradients[(playlist.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = playlist.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
-                        .animateItem()
+                        
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onPlaylistClick(playlist) }

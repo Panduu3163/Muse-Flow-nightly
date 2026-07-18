@@ -55,11 +55,11 @@ fun HistoryScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
-                    items(recentlyPlayed, key = { it.downloadKey() }) { track ->
+                    items(recentlyPlayed) { track ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .animateItem()
+                                
                                 .fillMaxWidth()
                                 .clickable { onPlayTrack(track, recentlyPlayed) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -67,7 +67,7 @@ fun HistoryScreen(
                             AsyncImage(
                                 model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                                     .data(track.imageUrl)
-                                    .crossfade(true)
+                                    
                                     .build(),
                                 contentDescription = "Cover",
                                 modifier = Modifier

@@ -103,7 +103,7 @@ fun ArtistDetailScreen(
                         coil.compose.AsyncImage(
                             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                                 .data(artist.imageUrl.replace("50x50", "500x500"))
-                                .crossfade(true)
+                                
                                 .build(),
                             contentDescription = "Artist Cover",
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop,

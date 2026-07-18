@@ -124,8 +124,8 @@ private fun ShelfContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
-                items(state.data, key = { it.downloadKey() }) { track ->
-                    TrackCard(track = track, onClick = { onPlayTrack(track, state.data) }, modifier = Modifier.animateItem())
+                items(state.data) { track ->
+                    TrackCard(track = track, onClick = { onPlayTrack(track, state.data) }, modifier = Modifier)
                 }
             }
         }

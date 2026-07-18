@@ -39,7 +39,7 @@ fun TrackArtwork(
             AsyncImage(
                 model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                     .data(imageUrl)
-                    .crossfade(true)
+                    
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,

@@ -191,7 +191,7 @@ fun StatsSection(title: String, items: List<TopItem>, isCircular: Boolean) {
                             AsyncImage(
                                 model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
                                     .data(item.imageUrl)
-                                    .crossfade(true)
+                                    
                                     .build(),
                                 contentDescription = item.title,
                                 modifier = Modifier.fillMaxSize(),
