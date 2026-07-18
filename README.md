@@ -9,7 +9,7 @@ Built with Kotlin, Jetpack Compose, and Media3 — a personal project aiming for
 ![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin)
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Active%20Development-orange?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-v1.0.9%20Beta-orange?style=for-the-badge)
 
 </div>
 
@@ -47,6 +47,7 @@ It relies on unofficial/reverse-engineered access to some music platforms' inter
 - **Smart Playlists:** Create playlists with source-selection features (Auto-fill from Liked Songs, Downloads, or initiate an Online Search).
 - **Intelligent Caching:** Efficient 100MB LRU cache for internet-streamed songs, viewable via the "Cached" tab.
 - **Downloads:** One-tap track downloading with determinate circular progress indicators and sequenced queue limits to preserve bandwidth. "Download All" option for Liked Songs.
+- **Seamless Stream Fallback:** Advanced local database mapping ensures downloaded and liked songs from external providers (like YouTube Music) are seamlessly re-resolved if stream links expire.
 
 ### 📊 Advanced Listening Stats
 - **Detailed History:** Seamless, chronological history view tracking every played song.
@@ -56,10 +57,9 @@ It relies on unofficial/reverse-engineered access to some music platforms' inter
 - First-launch onboarding with a custom display name and profile photo.
 - AMOLED (true black) and Gradient theme modes, with highly customizable color palettes.
 - **Deep UI Polish:**
-  - `bounceClick` micro-animations for responsive, tactile button feedback.
-  - Smooth list recomposition (`Modifier.animateItem()`) for elegant drag, drop, and delete animations.
-  - Fluid `Crossfade` image loading via Coil.
-  - Custom slide/fade shared-element-style Compose navigation transitions.
+  - Immersive Now Playing screen with frosted glass backgrounds reflecting the current album art.
+  - Automatic marquee scrolling for long titles.
+  - Smooth Compose navigation transitions and `Crossfade` image loading via Coil.
   - Smoothly interpolating seekbars.
 
 ---
@@ -105,7 +105,7 @@ Also thanks to the tester **Md Sakib Rahman** for testing and finding bugs.
 
 ## 📦 Getting the App
 
-This is currently a personal build, not published to any app store. To build it yourself:
+Download the latest `museflow_nightly_1.0.9_beta.apk` from the Releases section or build it yourself:
 
 **Prerequisites:** Android Studio (or the Android SDK + JDK 17+ directly), Kotlin 2.2+
 
@@ -122,6 +122,7 @@ This is currently a personal build, not published to any app store. To build it 
 - [x] Word-by-word synced lyrics
 - [x] Artist pages with monthly listener counts
 - [x] Continued UI polish
+- [x] Reliable cross-source library mapping (YT Music & JioSaavn)
 - [ ] Listen Together (real-time synced listening sessions)
 - [ ] Cross-device playback sync
 
