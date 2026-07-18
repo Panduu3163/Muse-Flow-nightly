@@ -433,7 +433,7 @@ fun SongsResults(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (!isFromYouTube) {
+                    if (false) {
                         DownloadButton(track = track, modifier = Modifier.testTag("search_download_button_${track.title.lowercase().replace(" ", "_")}"))
                     }
                 }

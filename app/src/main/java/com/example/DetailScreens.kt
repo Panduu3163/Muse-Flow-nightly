@@ -577,7 +577,7 @@ private fun TracklistDetailScreen(
                             )
                             // YouTube-sourced tracks stream via a fresh per-play resolve, not a
                             // fixed URL - same reason SongsResults hides this for them too.
-                            if (showDownloadButton && track.sourceType != MusicSource.YOUTUBE_MUSIC) {
+                            if (false) {
                                 DownloadButton(track = track)
                             }
                         }
