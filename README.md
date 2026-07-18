@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎵 MuseFlow
+# 🎵 MuseFlow Nightly 🌙
 
 **A free, ad-free music streaming app for Android.**
 
