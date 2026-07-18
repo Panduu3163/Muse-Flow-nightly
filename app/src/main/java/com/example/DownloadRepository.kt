@@ -1,10 +1,16 @@
 package com.example
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +21,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -30,6 +35,11 @@ import okhttp3.Request
  * A process-wide singleton (see [getInstance]) rather than a ViewModel-owned instance, since
  * downloads must keep running (and stay visible as "downloading") across whichever screen the
  * user navigates to next.
+ *
+ * Progress and completion are surfaced both in-app (via [inProgress] StateFlow, observed by
+ * [DownloadButton]) and as Android system notifications (a progress bar while downloading, a
+ * "Download complete" notification when done) so the user sees what's happening even when the
+ * app is backgrounded.
  */
 class DownloadRepository private constructor(context: Context) {
 
@@ -40,6 +50,7 @@ class DownloadRepository private constructor(context: Context) {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val downloadDispatcher = Dispatchers.IO.limitedParallelism(1)
     private val activeJobs = ConcurrentHashMap<String, Job>()
 
     private val _inProgress = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -54,20 +65,34 @@ class DownloadRepository private constructor(context: Context) {
 
     val completedDownloads: Flow<List<DownloadedTrackEntity>> = dao.observeCompleted()
 
+    private val notificationManager = NotificationManagerCompat.from(appContext)
+    /** Monotonically increasing id so each download gets its own notification slot. */
+    private val nextNotificationId = AtomicInteger(NOTIFICATION_ID_BASE)
+    /** Tracks which notification id was assigned to which download key, so we can update/dismiss. */
+    private val notificationIds = ConcurrentHashMap<String, Int>()
+
+    init { ensureNotificationChannel() }
+
     fun isDownloading(track: Track): Boolean = activeJobs.containsKey(track.downloadKey())
 
     fun startDownload(track: Track) {
         val key = track.downloadKey()
         if (activeJobs.containsKey(key)) return
         _failures.update { it - key }
-        activeJobs[key] = repositoryScope.launch {
+
+        val notifId = nextNotificationId.getAndIncrement()
+        notificationIds[key] = notifId
+
+        activeJobs[key] = repositoryScope.launch(downloadDispatcher) {
             _inProgress.update { it + (key to 0) }
+            showProgressNotification(notifId, track.title, 0)
             try {
-                val streamUrl = track.streamUrl ?: resolveStreamUrl(track)
-                ?: error("No playable stream found for \"${track.title}\"")
+                val streamUrl = StreamUrlResolver.resolve(appContext, track)
+                    ?: error("No playable stream found for \"${track.title}\"")
                 val targetFile = File(downloadsDir(appContext), "$key.audio")
                 downloadToFile(streamUrl, targetFile) { percent ->
                     _inProgress.update { it + (key to percent) }
+                    showProgressNotification(notifId, track.title, percent)
                 }
                 dao.upsert(
                     DownloadedTrackEntity(
@@ -85,25 +110,31 @@ class DownloadRepository private constructor(context: Context) {
                         sourceType = track.sourceType?.name
                     )
                 )
+                showCompletionNotification(notifId, track.title)
             } catch (e: CancellationException) {
                 // A user-initiated cancel (see cancelDownload) - not a failure, just clean up
                 // the partial file below and let the cancellation propagate as normal.
                 File(downloadsDir(appContext), "$key.audio").delete()
+                dismissNotification(notifId)
                 throw e
             } catch (e: Exception) {
                 // Don't leave a stale/broken row around - a partial file is useless, and the user
                 // can just tap download again.
                 File(downloadsDir(appContext), "$key.audio").delete()
                 _failures.update { it + (key to (e.message ?: "Download failed")) }
+                showFailureNotification(notifId, track.title)
             } finally {
                 _inProgress.update { it - key }
                 activeJobs.remove(key)
+                notificationIds.remove(key)
             }
         }
     }
 
     fun cancelDownload(track: Track) {
-        activeJobs.remove(track.downloadKey())?.cancel()
+        val key = track.downloadKey()
+        notificationIds.remove(key)?.let { dismissNotification(it) }
+        activeJobs.remove(key)?.cancel()
     }
 
     suspend fun deleteDownload(track: Track) {
@@ -113,13 +144,63 @@ class DownloadRepository private constructor(context: Context) {
         dao.deleteByKey(key)
     }
 
-    private fun resolveStreamUrl(track: Track): String? {
-        // Blocking call is fine here - already running on repositoryScope's IO dispatcher.
-        return runBlocking {
-            JioSaavnProvider().search("${track.title} ${track.artist}")
-                .firstOrNull { it.directStreamUrl != null }?.directStreamUrl
+    // ── Notification helpers ────────────────────────────────────────────────
+
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Downloads",
+                NotificationManager.IMPORTANCE_LOW   // no sound/vibration — purely visual
+            ).apply {
+                description = "Track download progress and completion"
+                setShowBadge(false)
+            }
+            val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
         }
     }
+
+    private fun baseNotificationBuilder(title: String): NotificationCompat.Builder =
+        NotificationCompat.Builder(appContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title)
+            .setOnlyAlertOnce(true)
+
+    private fun showProgressNotification(id: Int, title: String, percent: Int) {
+        val indeterminate = percent < 0
+        val builder = baseNotificationBuilder(title)
+            .setContentText(if (indeterminate) "Downloading…" else "$percent%")
+            .setProgress(100, if (indeterminate) 0 else percent, indeterminate)
+            .setOngoing(true)
+        try { notificationManager.notify(id, builder.build()) } catch (_: SecurityException) {}
+    }
+
+    private fun showCompletionNotification(id: Int, title: String) {
+        val builder = baseNotificationBuilder(title)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentText("Download complete")
+            .setProgress(0, 0, false)  // removes the progress bar
+            .setOngoing(false)
+            .setAutoCancel(true)
+        try { notificationManager.notify(id, builder.build()) } catch (_: SecurityException) {}
+    }
+
+    private fun showFailureNotification(id: Int, title: String) {
+        val builder = baseNotificationBuilder(title)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentText("Download failed")
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+        try { notificationManager.notify(id, builder.build()) } catch (_: SecurityException) {}
+    }
+
+    private fun dismissNotification(id: Int) {
+        try { notificationManager.cancel(id) } catch (_: SecurityException) {}
+    }
+
+    // ── File download ───────────────────────────────────────────────────────
 
     private fun downloadToFile(url: String, targetFile: File, onProgress: (Int) -> Unit) {
         val request = Request.Builder().url(url).build()
@@ -144,6 +225,10 @@ class DownloadRepository private constructor(context: Context) {
                                 lastReportedPercent = percent
                                 onProgress(percent)
                             }
+                        } else if (lastReportedPercent != -1) {
+                            // No content-length header — report indeterminate once.
+                            lastReportedPercent = -1
+                            onProgress(-1)
                         }
                     }
                 }
@@ -152,6 +237,9 @@ class DownloadRepository private constructor(context: Context) {
     }
 
     companion object {
+        private const val CHANNEL_ID = "museflow_downloads"
+        private const val NOTIFICATION_ID_BASE = 9000
+
         fun downloadsDir(context: Context): File = File(context.filesDir, "downloads")
 
         @Volatile private var instance: DownloadRepository? = null

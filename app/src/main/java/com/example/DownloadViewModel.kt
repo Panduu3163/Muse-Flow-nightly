@@ -22,6 +22,9 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         .map { entities -> entities.map { it.toTrack() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Key -> percent (0..100, or -1 for indeterminate) for every active download. */
+    val downloadProgress: StateFlow<Map<String, Int>> = repository.inProgress
+
     val downloadingKeys: StateFlow<Set<String>> = repository.inProgress
         .map { it.keys }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())

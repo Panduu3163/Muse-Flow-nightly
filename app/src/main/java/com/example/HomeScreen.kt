@@ -19,9 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +41,8 @@ fun HomeScreen(
     val recentlyPlayed by homeViewModel.recentlyPlayed.collectAsState()
     val moodShelves by homeViewModel.moodShelves.collectAsState()
 
+    val isOffline by homeViewModel.isOfflineMode.collectAsState()
+
     ThemedBackground(
         modifier = modifier.fillMaxSize()
     ) {
@@ -53,6 +53,17 @@ fun HomeScreen(
             // Header
             item {
                 HomeHeader()
+            }
+
+            if (isOffline) {
+                item {
+                    Text(
+                        text = "Offline — showing cached results",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             // Shelf: Recently Played - real playback history from Room, not a fixed mock list.
@@ -113,8 +124,8 @@ private fun ShelfContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
-                items(state.data) { track ->
-                    TrackCard(track = track, onClick = { onPlayTrack(track, state.data) })
+                items(state.data, key = { it.downloadKey() }) { track ->
+                    TrackCard(track = track, onClick = { onPlayTrack(track, state.data) }, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -177,6 +188,27 @@ fun HomeHeader() {
     val userProfileViewModel: UserProfileViewModel = viewModel()
     val profile by userProfileViewModel.state.collectAsState()
 
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    val greetingData = remember(hour) {
+        val baseGreeting = when (hour) {
+            in 5..8 -> "Early morning"
+            in 9..11 -> "Good morning"
+            12 -> "Good noon"
+            in 13..16 -> "Good afternoon"
+            in 17..23 -> "Good evening"
+            else -> "Late night"
+        }
+        val subtitles = listOf(
+            "Ready for some tunes?",
+            "Discover your rhythm.",
+            "What are we listening to today?",
+            "Let's find your next favorite song."
+        )
+        Pair(baseGreeting, subtitles.random())
+    }
+    val greeting = greetingData.first
+    val subtitle = greetingData.second
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -186,7 +218,7 @@ fun HomeHeader() {
     ) {
         Column {
             Text(
-                text = "MuseFlow",
+                text = greeting,
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
@@ -194,24 +226,13 @@ fun HomeHeader() {
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Discover your rhythm",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = {},
-                modifier = Modifier.testTag("notification_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Notifications,
-                    contentDescription = "Notifications",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
             // Profile circular avatar
             UserAvatar(
                 photoUri = profile.photoUri,

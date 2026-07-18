@@ -16,13 +16,16 @@ import kotlinx.coroutines.launch
  */
 class PlaybackHistoryRepository private constructor(context: Context) {
 
-    private val dao = MuseFlowDatabase.getInstance(context.applicationContext).playbackHistoryDao()
+    private val db = MuseFlowDatabase.getInstance(context.applicationContext)
+    private val dao = db.playbackHistoryDao()
+    private val statsDao = db.statsDao()
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun observeRecent(limit: Int): Flow<List<PlaybackHistoryEntity>> = dao.observeRecent(limit)
 
     fun recordPlayed(track: Track) {
         repositoryScope.launch {
+            val playedAtTime = System.currentTimeMillis()
             dao.record(
                 PlaybackHistoryEntity(
                     key = track.downloadKey(),
@@ -33,12 +36,30 @@ class PlaybackHistoryRepository private constructor(context: Context) {
                     gradientIndex = track.gradientIndex,
                     imageUrl = track.imageUrl,
                     streamUrl = track.streamUrl,
-                    playedAt = System.currentTimeMillis(),
+                    playedAt = playedAtTime,
                     sourceId = track.sourceId,
                     sourceType = track.sourceType?.name
                 )
             )
+            val durationMs = parseDurationToMs(track.duration)
+            statsDao.recordEvent(
+                PlaybackEventEntity(
+                    trackKey = track.downloadKey(),
+                    playedAt = playedAtTime,
+                    durationMs = durationMs
+                )
+            )
         }
+    }
+
+    private fun parseDurationToMs(durationStr: String): Long {
+        val parts = durationStr.split(":")
+        if (parts.size == 2) {
+            val min = parts[0].toLongOrNull() ?: 0L
+            val sec = parts[1].toLongOrNull() ?: 0L
+            return (min * 60 + sec) * 1000
+        }
+        return 0L
     }
 
     companion object {

@@ -4,7 +4,7 @@ package com.example
  * badge) and lets playback decide whether a result is directly playable (JioSaavn) or needs to
  * be resolved to a JioSaavn match first (YouTube Music, which this app never streams from
  * directly). */
-enum class MusicSource { JIOSAAVN, YOUTUBE_MUSIC, NETEASE }
+enum class MusicSource { JIOSAAVN, YOUTUBE_MUSIC, NETEASE, LOCAL_DEVICE }
 
 /** A single track found by a [Provider], from any source (YouTube Music, JioSaavn, ...). */
 data class TrackResult(
@@ -42,7 +42,15 @@ data class ArtistResult(
     val id: String,
     val name: String,
     val imageUrl: String?,
+    val listenerCount: String? = null,
     val sourceType: MusicSource = MusicSource.JIOSAAVN
+)
+
+/** Full details for an artist, used to populate the ArtistDetailScreen. */
+data class ArtistDetails(
+    val aboutText: String?,
+    val subscribers: String?,
+    val monthlyListeners: String?
 )
 
 /** A playlist search result (JioSaavn or YouTube Music), enough to render a row and fetch its

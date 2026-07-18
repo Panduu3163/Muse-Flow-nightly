@@ -31,7 +31,10 @@ data class PlayerUiState(
     /** A user-facing message for the most recent playback failure (e.g. no network reaching
      * JioSaavn), or null when nothing's currently wrong. Cleared as soon as something actually
      * starts playing again. */
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val sleepTimerRemainingSeconds: Int? = null,
+    val queue: List<Track> = emptyList(),
+    val queueIndex: Int = 0
 )
 
 /**
@@ -46,6 +49,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val uiState: StateFlow<PlayerUiState> = _uiState
 
     private var controller: MediaController? = null
+    private var sleepTimerJob: kotlinx.coroutines.Job? = null
     private val controllerFuture = MediaController.Builder(
         application,
         SessionToken(application, ComponentName(application, PlaybackService::class.java))
@@ -109,7 +113,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             queuedTrack.toQueueMediaItem(index, downloadedFilePathsByKey[queuedTrack.downloadKey()])
         }
         _uiState.update { it.copy(errorMessage = null) }
-        controller.setMediaItems(mediaItems, startIndex, 0L)
+        _uiState.update { it.copy(queue = queue, queueIndex = startIndex) }
+        controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
         controller.prepare()
         controller.play()
     }
@@ -139,6 +144,34 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         controller?.seekToPreviousMediaItem()
     }
 
+    fun skipToIndex(index: Int) {
+        controller?.seekToDefaultPosition(index)
+    }
+
+    fun startSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
+            _uiState.update { it.copy(sleepTimerRemainingSeconds = null) }
+            return
+        }
+        var remaining = minutes * 60
+        _uiState.update { it.copy(sleepTimerRemainingSeconds = remaining) }
+        sleepTimerJob = viewModelScope.launch {
+            while (remaining > 0) {
+                delay(1000)
+                remaining -= 1
+                _uiState.update { it.copy(sleepTimerRemainingSeconds = remaining) }
+            }
+            controller?.pause()
+            _uiState.update { it.copy(sleepTimerRemainingSeconds = null) }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        _uiState.update { it.copy(sleepTimerRemainingSeconds = null) }
+    }
+
     fun stopPlayback() {
         controller?.stop()
         controller?.clearMediaItems()
@@ -147,12 +180,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun syncStateFromController(controller: MediaController) {
         val index = controller.currentMediaItem?.mediaId?.toIntOrNull()
         val track = index?.let { activeQueue.getOrNull(it) }
+        val duration = controller.duration
+        val position = controller.currentPosition.coerceAtLeast(0L)
         _uiState.update {
             it.copy(
                 track = track,
+                queueIndex = index ?: 0,
                 isPlaying = controller.isPlaying,
-                progress = progressFraction(controller),
-                positionMs = controller.currentPosition.coerceAtLeast(0L)
+                progress = if (duration > 0 && duration != C.TIME_UNSET) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f,
+                positionMs = position,
+                errorMessage = controller.playerError?.toUserMessage()
             )
         }
     }

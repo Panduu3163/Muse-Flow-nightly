@@ -4,7 +4,7 @@
 
 **A free, ad-free music streaming app for Android.**
 
-Built with Kotlin, Jetpack Compose, and Media3 — a personal project aiming for a free music experience without the price tag.
+Built with Kotlin, Jetpack Compose, and Media3 — a personal project aiming for a free premium music experience without the price tag.
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin)
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android)
@@ -19,35 +19,48 @@ Built with Kotlin, Jetpack Compose, and Media3 — a personal project aiming for
 
 MuseFlow is a **personal hobby project**, not a commercial product. It has bugs. It's actively being worked on. It exists because I wanted to learn and build something I'd actually use — not to compete with anyone.
 
-It also relies on unofficial/reverse-engineered access to some music platforms' internal APIs (details below), which exists in a legal gray area regarding those platforms' Terms of Service. This is the same trade-off made by several well-known open-source music apps this project draws inspiration and code from. Use accordingly.
+It relies on unofficial/reverse-engineered access to some music platforms' internal APIs (details below), which exists in a legal gray area regarding those platforms' Terms of Service. This is the same trade-off made by several well-known open-source music apps this project draws inspiration and code from. Use accordingly.
 
 ---
 
 ## ✨ Features
 
-### 🎧 Playback
-- Background playback with a real, controllable media notification (play/pause/skip, cover art)
-- Gapless queue management — skip, shuffle, repeat
-- Offline downloads for on-the-go listening, no connection required
-- Local device file playback alongside streaming
+### 🎧 Playback & Control
+- Background playback with a fully controllable media notification (play/pause/skip, cover art).
+- Gapless queue management — skip, shuffle, repeat, and an interactive **Up Next** modal directly on the player.
+- **Sleep Timer:** Fully functional sleep timer (10, 15, 30, 45 mins) to automatically pause playback.
+- **Dynamic Track Sources:** Accurately displays stream origins (e.g., JioSaavn, YouTube Music) and quality details directly on the Now Playing screen.
 
-### 🔍 Discovery
-- Search across **Songs, Albums, Artists, and Playlists**
-- Results merged and deduplicated across multiple sources automatically
-- Real Home feed shelves (Recently Played, mood/genre-based recommendations)
-- Search history
+### 🔍 Discovery & Home
+- **Dynamic Home Screen:** Intelligent time-based greetings ("Good morning", "Late night") and rich shelves (Recently Played, genre-based recommendations).
+- Search across **Songs, Albums, Artists, and Playlists**, deduplicated across multiple sources.
+- **Search History:** Persistent search history with quick "Recent Searches" recall.
+- **Offline Home Cache:** Caches Home shelves to a Room database and displays an offline banner when network connectivity is lost, ensuring the app is always functional.
 
-### 🎤 Lyrics
-- Real-time synced lyrics, scrolling in time with playback
+### 🎤 Syllable-Synced Lyrics
+- Real-time synced lyrics, scrolling in perfect time with playback.
+- **Syllable-Level Highlighting:** Advanced parsing extracts precise millisecond-level timings to highlight individual words as the artist sings them, providing a premium karaoke-like experience.
 
-### 🎨 Personalization
-- First-launch onboarding with a custom display name and profile photo
-- AMOLED (true black) and Gradient theme modes, with selectable color palettes
-- Deep Appearance/Player/Lyrics customization options
+### 📚 Ultimate Library Management
+- **Unified Hub:** Clean, chip-based navigation for Playlists, Liked Songs, Downloads, Local Audio, and Cached Tracks.
+- **Local Audio Integration:** Automatically scans your device via `MediaStore` and plays local MP3s alongside streaming tracks, complete with embedded cover art parsing.
+- **Smart Playlists:** Create playlists with source-selection features (Auto-fill from Liked Songs, Downloads, or initiate an Online Search).
+- **Intelligent Caching:** Efficient 100MB LRU cache for internet-streamed songs, viewable via the "Cached" tab.
+- **Downloads:** One-tap track downloading with determinate circular progress indicators and sequenced queue limits to preserve bandwidth. "Download All" option for Liked Songs.
 
-### 📚 Library
-- Liked Songs, Downloaded tracks, Recently Played — all backed by real local data, nothing hardcoded
-- Create and manage your own playlists
+### 📊 Advanced Listening Stats
+- **Detailed History:** Seamless, chronological history view tracking every played song.
+- **Analytics Dashboard:** A robust stats screen dynamically aggregating your Top Songs, Top Artists, and Top Albums. Features precise timeframe filters (1 week, 1 month, 3 months, 6 months, 1 year, continuous).
+
+### 🎨 Personalization & Premium UI
+- First-launch onboarding with a custom display name and profile photo.
+- AMOLED (true black) and Gradient theme modes, with highly customizable color palettes.
+- **Deep UI Polish:**
+  - `bounceClick` micro-animations for responsive, tactile button feedback.
+  - Smooth list recomposition (`Modifier.animateItem()`) for elegant drag, drop, and delete animations.
+  - Fluid `Crossfade` image loading via Coil.
+  - Custom slide/fade shared-element-style Compose navigation transitions.
+  - Smoothly interpolating seekbars.
 
 ---
 
@@ -60,18 +73,18 @@ It also relies on unofficial/reverse-engineered access to some music platforms' 
 | Playback | Media3 / ExoPlayer |
 | Architecture | MVVM, Hilt (DI), Kotlin Coroutines & Flow |
 | Local Storage | Room, DataStore Preferences |
-| Networking | Retrofit, OkHttp |
+| Networking | Retrofit, OkHttp, Moshi |
 | Images | Coil |
 
 ### How music sourcing works
 
 MuseFlow doesn't host or own any music. It resolves playable audio through a **provider-chain architecture** — multiple independent sources, tried and merged so no single point of failure takes down the app:
 
-- **JioSaavn** — primary catalog source, public API
-- **YouTube Music** — full authenticated streaming pipeline (visitor identity, BotGuard proof-of-origin token generation, signature/cipher deobfuscation) for access to YouTube's much broader catalog
-- **LRCLib** — open, public API for synced lyrics
+- **JioSaavn** — primary catalog source, public API.
+- **YouTube Music** — full authenticated streaming pipeline (visitor identity, BotGuard proof-of-origin token generation, signature/cipher deobfuscation) for access to YouTube's much broader catalog. Extracts precise monthly listeners/subscribers counts.
+- **LRCLib** — open, public API for synced lyrics.
 
-Each source is isolated behind a shared `Provider` interface, so if one breaks (which does happen — these are unofficial integrations reacting to platform changes), the others keep the app functional.
+Each source is isolated behind a shared `Provider` interface, so if one breaks, the others keep the app functional.
 
 ---
 
@@ -86,7 +99,8 @@ MuseFlow wouldn't exist without the open-source music-client community. Signific
 - [LRCLib](https://lrclib.net) — synced lyrics API
 
 Genuine thanks to the maintainers of these projects for their work being open enough to learn from.
-Also Thanks to the tester Md Sakib Rahman for testing and finding bugs.
+Also thanks to the tester **Md Sakib Rahman** for testing and finding bugs.
+
 ---
 
 ## 📦 Getting the App
@@ -104,11 +118,12 @@ This is currently a personal build, not published to any app store. To build it 
 
 ## 🚧 Roadmap
 
-- [ ] Additional lyrics source fallbacks
-- [ ] Word-by-word synced lyrics
-- [ ] Artist pages with monthly listener counts
+- [x] Additional lyrics source fallbacks
+- [x] Word-by-word synced lyrics
+- [x] Artist pages with monthly listener counts
+- [x] Continued UI polish
 - [ ] Listen Together (real-time synced listening sessions)
-- [ ] Continued UI polish
+- [ ] Cross-device playback sync
 
 ---
 
@@ -120,7 +135,7 @@ This project is licensed under **GPL-3.0**, consistent with the licenses of the 
 
 ## 👤 Developer
 
-**Mynul Kabir Nayem**
+**Mynul Kabir Nayem**  
 📧 mynulkbr@gmail.com
 
 <div align="center">

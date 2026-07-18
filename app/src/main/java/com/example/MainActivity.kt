@@ -79,16 +79,16 @@ class MainActivity : ComponentActivity() {
 
 // Settings sub-screens slide horizontally, like a classic drill-down list.
 private val settingsEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
+    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(250)) + fadeIn(animationSpec = tween(250))
 }
 private val settingsExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-    slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+    slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(250)) + fadeOut(animationSpec = tween(250))
 }
 private val settingsPopEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-    slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
+    slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(250)) + fadeIn(animationSpec = tween(250))
 }
 private val settingsPopExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(250)) + fadeOut(animationSpec = tween(250))
 }
 
 // Bottom-nav tabs simply cross-fade into each other.
@@ -101,10 +101,10 @@ private val tabExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> Exi
 
 // Now Playing always slides up/down regardless of push vs. pop direction.
 private val nowPlayingEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-    slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)) + fadeIn(animationSpec = tween(400))
+    slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)) + fadeIn(animationSpec = tween(300))
 }
 private val nowPlayingExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-    slideOutVertically(targetOffsetY = { it }, animationSpec = tween(350)) + fadeOut(animationSpec = tween(350))
+    slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)) + fadeOut(animationSpec = tween(250))
 }
 
 /**
@@ -219,6 +219,8 @@ private fun MainApp() {
                             isPlaying = isPlaying,
                             progress = playbackProgress,
                             onPlayPauseToggle = { playerViewModel.togglePlayPause() },
+                            onNext = { playerViewModel.skipNext() },
+                            onPrevious = { playerViewModel.skipPrevious() },
                             onClose = { playerViewModel.stopPlayback() },
                             onClick = { navController.navigate(Routes.NOW_PLAYING) }
                         )
@@ -299,14 +301,18 @@ private fun MainApp() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.HOME,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                enterTransition = { fadeIn(animationSpec = tween(250)) },
+                exitTransition = { fadeOut(animationSpec = tween(250)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(250)) },
+                popExitTransition = { fadeOut(animationSpec = tween(250)) }
             ) {
-                composable(Routes.HOME, enterTransition = tabEnter, exitTransition = tabExit) {
+                composable(Routes.HOME) {
                     Box(Modifier.padding(innerPadding)) {
                         HomeScreen(onPlayTrack = onPlayQueuedTrack)
                     }
                 }
-                composable(Routes.SEARCH, enterTransition = tabEnter, exitTransition = tabExit) {
+                composable(Routes.SEARCH) {
                     Box(Modifier.padding(innerPadding)) {
                         SearchScreen(
                             onPlayTrack = onPlayQueuedTrack,
@@ -325,12 +331,27 @@ private fun MainApp() {
                         )
                     }
                 }
-                composable(Routes.LIBRARY, enterTransition = tabEnter, exitTransition = tabExit) {
+                composable(Routes.LIBRARY) {
                     Box(Modifier.padding(innerPadding)) {
-                        LibraryScreen(onPlayTrack = onPlayQueuedTrack)
+                        LibraryScreen(
+                            onPlayTrack = onPlayQueuedTrack,
+                            onPlaylistClick = { playlist ->
+                                selectedPlaylist = playlist
+                                navController.navigate(Routes.PLAYLIST_DETAIL)
+                            },
+                            onNavigateToSearch = {
+                                navController.navigate(MuseTab.Search.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
                     }
                 }
-                composable(Routes.SETTINGS, enterTransition = tabEnter, exitTransition = tabExit) {
+                composable(Routes.SETTINGS) {
                     Box(Modifier.padding(innerPadding)) {
                         SettingsScreen(navController = navController)
                     }
@@ -595,7 +616,19 @@ private fun MainApp() {
                             onPlayPauseToggle = { playerViewModel.togglePlayPause() },
                             onClose = { navController.popBackStack() },
                             onNext = { playerViewModel.skipNext() },
-                            onPrevious = { playerViewModel.skipPrevious() }
+                            onPrevious = { playerViewModel.skipPrevious() },
+                            onArtistClick = { artistName ->
+                                navController.popBackStack()
+                                // Just pass a mock ArtistResult to trigger a search navigation
+                                selectedArtist = ArtistResult(id = artistName, name = artistName, imageUrl = null)
+                                navController.navigate(Routes.ARTIST_DETAIL)
+                            },
+                            sleepTimerRemainingSeconds = playerState.sleepTimerRemainingSeconds,
+                            queue = playerState.queue,
+                            queueIndex = playerState.queueIndex,
+                            onSkipToIndex = { index -> playerViewModel.skipToIndex(index) },
+                            onSetSleepTimer = { playerViewModel.startSleepTimer(it) },
+                            onCancelSleepTimer = { playerViewModel.cancelSleepTimer() }
                         )
                     }
                 }
@@ -610,6 +643,8 @@ fun CompactPlayer(
     isPlaying: Boolean,
     progress: Float,
     onPlayPauseToggle: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onClose: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -664,11 +699,38 @@ fun CompactPlayer(
                 }
 
                 // Playback Control Buttons
-                IconButton(onClick = onPlayPauseToggle) {
+                Box(
+                    modifier = Modifier.size(48.dp).bounceClick { onPrevious() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = "Previous Track",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.size(48.dp).bounceClick { onPlayPauseToggle() },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.size(48.dp).bounceClick { onNext() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Next Track",
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -684,6 +746,7 @@ fun CompactPlayer(
             }
 
             // Player Progress Bar, driven by the shared playback position
+            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), label = "compact_progress")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -693,7 +756,7 @@ fun CompactPlayer(
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .fillMaxWidth(animatedProgress)
                         .background(
                             Brush.horizontalGradient(
                                 colors = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)

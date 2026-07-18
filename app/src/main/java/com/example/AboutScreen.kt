@@ -124,7 +124,7 @@ fun AboutScreen(
                                 .testTag("about_build_type_chip")
                         ) {
                             Text(
-                                text = if (BuildConfig.DEBUG) "DEBUG" else "RELEASE",
+                                text = if (BuildConfig.DEBUG) "BETA" else "RELEASE",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (BuildConfig.DEBUG) Color(0xFFFFB74D) else Color(0xFF81C784)
                             )

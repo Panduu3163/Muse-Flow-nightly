@@ -37,7 +37,10 @@ fun TrackArtwork(
     ) {
         if (imageUrl != null) {
             AsyncImage(
-                model = imageUrl,
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(imageUrl)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize()

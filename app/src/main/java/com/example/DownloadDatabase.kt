@@ -128,7 +128,12 @@ interface LikedSongDao {
 data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val remoteId: String? = null,
+    val sourceType: String? = null,
+    val imageUrl: String? = null,
+    val subtitle: String? = null,
+    val tracksJson: String? = null
 )
 
 @Dao
@@ -136,9 +141,147 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<PlaylistEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: PlaylistEntity): Long
+
+    @Query("SELECT EXISTS(SELECT 1 FROM playlists WHERE remoteId = :remoteId LIMIT 1)")
+    fun observeIsSaved(remoteId: String): Flow<Boolean>
+
+    @Query("SELECT tracksJson FROM playlists WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getTracksJson(remoteId: String): String?
+
+    @Query("DELETE FROM playlists WHERE remoteId = :remoteId")
+    suspend fun removeByRemoteId(remoteId: String)
 }
+
+@Entity(tableName = "home_shelves")
+data class HomeShelfEntity(
+    @PrimaryKey val title: String,
+    val tracksJson: String,
+    val updatedAt: Long
+)
+
+@Dao
+interface HomeShelfDao {
+    @Query("SELECT * FROM home_shelves WHERE title = :title LIMIT 1")
+    suspend fun getShelf(title: String): HomeShelfEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveShelf(entity: HomeShelfEntity)
+}
+
+@Entity(tableName = "search_history")
+data class SearchHistoryEntity(
+    @PrimaryKey val query: String,
+    val timestamp: Long
+)
+
+@Dao
+interface SearchHistoryDao {
+    @Query("SELECT * FROM search_history ORDER BY timestamp DESC LIMIT 20")
+    fun observeRecentSearches(): Flow<List<SearchHistoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSearch(entity: SearchHistoryEntity)
+
+    @Query("DELETE FROM search_history WHERE query = :query")
+    suspend fun deleteSearch(query: String)
+
+    @Query("DELETE FROM search_history")
+    suspend fun clearAll()
+}
+
+@Entity(tableName = "cached_tracks")
+data class CachedTrackEntity(
+    @PrimaryKey val key: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val duration: String,
+    val gradientIndex: Int,
+    val imageUrl: String?,
+    val streamUrl: String?,
+    val cachedAt: Long,
+    val sourceId: String? = null,
+    val sourceType: String? = null
+)
+
+@Dao
+interface CachedTrackDao {
+    @Query("SELECT * FROM cached_tracks ORDER BY cachedAt DESC")
+    fun observeCachedTracks(): Flow<List<CachedTrackEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun record(entity: CachedTrackEntity)
+}
+
+@Entity(
+    tableName = "playback_events",
+    foreignKeys = [
+        androidx.room.ForeignKey(
+            entity = PlaybackHistoryEntity::class,
+            parentColumns = ["key"],
+            childColumns = ["trackKey"],
+            onDelete = androidx.room.ForeignKey.CASCADE
+        )
+    ],
+    indices = [androidx.room.Index("trackKey"), androidx.room.Index("playedAt")]
+)
+data class PlaybackEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trackKey: String,
+    val playedAt: Long,
+    val durationMs: Long
+)
+
+data class TopItem(
+    val title: String,
+    val subtitle: String,
+    val imageUrl: String?,
+    val gradientIndex: Int,
+    val playCount: Int,
+    val totalDurationMs: Long
+)
+
+@Dao
+interface StatsDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun recordEvent(entity: PlaybackEventEntity)
+
+    @Query("""
+        SELECT h.title, h.artist as subtitle, h.imageUrl, h.gradientIndex, COUNT(e.id) as playCount, SUM(e.durationMs) as totalDurationMs
+        FROM playback_events e
+        INNER JOIN playback_history h ON e.trackKey = h.key
+        WHERE e.playedAt >= :since
+        GROUP BY e.trackKey
+        ORDER BY playCount DESC
+        LIMIT :limit
+    """)
+    fun getTopSongs(since: Long, limit: Int): Flow<List<TopItem>>
+
+    @Query("""
+        SELECT h.artist as title, '' as subtitle, h.imageUrl, h.gradientIndex, COUNT(e.id) as playCount, SUM(e.durationMs) as totalDurationMs
+        FROM playback_events e
+        INNER JOIN playback_history h ON e.trackKey = h.key
+        WHERE e.playedAt >= :since
+        GROUP BY h.artist
+        ORDER BY playCount DESC
+        LIMIT :limit
+    """)
+    fun getTopArtists(since: Long, limit: Int): Flow<List<TopItem>>
+
+    @Query("""
+        SELECT h.album as title, h.artist as subtitle, h.imageUrl, h.gradientIndex, COUNT(e.id) as playCount, SUM(e.durationMs) as totalDurationMs
+        FROM playback_events e
+        INNER JOIN playback_history h ON e.trackKey = h.key
+        WHERE e.playedAt >= :since AND h.album != 'Unknown' AND h.album != ''
+        GROUP BY h.album
+        ORDER BY playCount DESC
+        LIMIT :limit
+    """)
+    fun getTopAlbums(since: Long, limit: Int): Flow<List<TopItem>>
+}
+
 
 /** v3 -> v4: adds [DownloadedTrackEntity.sourceId]/[DownloadedTrackEntity.sourceType] and
  * [PlaybackHistoryEntity.sourceId]/[PlaybackHistoryEntity.sourceType] - both nullable with no
@@ -153,14 +296,54 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `home_shelves` (`title` TEXT NOT NULL, `tracksJson` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`title`))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `search_history` (`query` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`query`))")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `cached_tracks` (`key` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `album` TEXT NOT NULL, `duration` TEXT NOT NULL, `gradientIndex` INTEGER NOT NULL, `imageUrl` TEXT, `streamUrl` TEXT, `cachedAt` INTEGER NOT NULL, `sourceId` TEXT, `sourceType` TEXT, PRIMARY KEY(`key`))")
+    }
+}
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `playback_events` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackKey` TEXT NOT NULL, `playedAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, FOREIGN KEY(`trackKey`) REFERENCES `playback_history`(`key`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_events_trackKey` ON `playback_events` (`trackKey`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_events_playedAt` ON `playback_events` (`playedAt`)")
+    }
+}
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN remoteId TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN sourceType TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN imageUrl TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN subtitle TEXT")
+    }
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN tracksJson TEXT")
+    }
+}
+
 @Database(
     entities = [
         DownloadedTrackEntity::class,
         PlaybackHistoryEntity::class,
         LikedSongEntity::class,
-        PlaylistEntity::class
+        PlaylistEntity::class,
+        HomeShelfEntity::class,
+        SearchHistoryEntity::class,
+        CachedTrackEntity::class,
+        PlaybackEventEntity::class
     ],
-    version = 4,
+    version = 9,
     exportSchema = false
 )
 abstract class MuseFlowDatabase : RoomDatabase() {
@@ -168,6 +351,10 @@ abstract class MuseFlowDatabase : RoomDatabase() {
     abstract fun playbackHistoryDao(): PlaybackHistoryDao
     abstract fun likedSongDao(): LikedSongDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun homeShelfDao(): HomeShelfDao
+    abstract fun searchHistoryDao(): SearchHistoryDao
+    abstract fun cachedTrackDao(): CachedTrackDao
+    abstract fun statsDao(): StatsDao
 
     companion object {
         @Volatile private var instance: MuseFlowDatabase? = null
@@ -179,8 +366,9 @@ abstract class MuseFlowDatabase : RoomDatabase() {
                     MuseFlowDatabase::class.java,
                     "museflow.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build().also { instance = it }
             }
+
     }
 }

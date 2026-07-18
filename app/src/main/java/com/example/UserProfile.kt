@@ -132,7 +132,10 @@ fun UserAvatar(
 ) {
     if (photoUri != null) {
         AsyncImage(
-            model = photoUri,
+            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                .data(photoUri)
+                .crossfade(true)
+                .build(),
             contentDescription = "Profile photo",
             contentScale = ContentScale.Crop,
             modifier = modifier

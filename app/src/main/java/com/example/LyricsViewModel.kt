@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
  * track.
  */
 class LyricsViewModel(
-    private val lrcLibProvider: LrcLibProvider = LrcLibProvider()
+    private val providers: List<LyricsProvider> = listOf(LrcLibProvider(), BetterLyricsProvider())
 ) : ViewModel() {
 
     private val _lyricsResult = MutableStateFlow<LyricsResult?>(null)
@@ -29,12 +29,23 @@ class LyricsViewModel(
         loadedForTrack = track
         _lyricsResult.value = null
         viewModelScope.launch {
-            val durationSeconds = parseDurationToSeconds(track.duration)
-            val result = lrcLibProvider.fetchLyrics(track.title, track.artist, durationSeconds)
+            val durationMs = parseDurationToSeconds(track.duration)?.times(1000L)
+            var finalResult: LyricsResult = LyricsResult.NotFound
+
+            for (provider in providers) {
+                val result = provider.fetchLyrics(track.title, track.artist, durationMs)
+                if (result is LyricsResult.Synced || result is LyricsResult.PlainOnly || result is LyricsResult.Instrumental) {
+                    finalResult = result
+                    break
+                } else {
+                    finalResult = result
+                }
+            }
+
             // Guards against a slow request for a track the user has since skipped past landing
             // on top of whatever's actually playing now.
             if (loadedForTrack == track) {
-                _lyricsResult.value = result
+                _lyricsResult.value = finalResult
             }
         }
     }

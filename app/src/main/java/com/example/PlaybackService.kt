@@ -13,6 +13,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -129,9 +130,14 @@ class PlaybackService : MediaSessionService() {
             // DownloadRepository already uses elsewhere in this app.
             val resolvedUrl = runBlocking { YouTubeStreamResolver.resolve(this@PlaybackService, videoId) }
                 ?: throw IOException("Could not resolve a playable stream for YouTube video $videoId")
-            dataSpec.withUri(resolvedUrl.toUri())
+            dataSpec.buildUpon().setKey(videoId).setUri(resolvedUrl.toUri()).build()
         }
-        return DefaultDataSource.Factory(this, resolvingHttpFactory)
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(CacheManager.getInstance(this))
+            .setUpstreamDataSourceFactory(resolvingHttpFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            
+        return DefaultDataSource.Factory(this, cacheDataSourceFactory)
     }
 
     private inner class PlaybackServiceCallback : MediaSession.Callback {
@@ -175,6 +181,26 @@ class PlaybackService : MediaSessionService() {
         val track = index?.let { MusicData.tracks.getOrNull(it) }
         val resolved = track?.let { resolver.resolve(it) }
         val streamUrl = resolved?.directStreamUrl
+
+        if (track != null) {
+            serviceScope.launch(Dispatchers.IO) {
+                MuseFlowDatabase.getInstance(this@PlaybackService).cachedTrackDao().record(
+                    CachedTrackEntity(
+                        key = track.downloadKey(),
+                        title = track.title,
+                        artist = track.artist,
+                        album = track.album,
+                        duration = track.duration,
+                        gradientIndex = track.gradientIndex,
+                        imageUrl = track.imageUrl,
+                        streamUrl = streamUrl,
+                        cachedAt = System.currentTimeMillis(),
+                        sourceId = track.sourceId,
+                        sourceType = track.sourceType?.name
+                    )
+                )
+            }
+        }
 
         if (track == null || streamUrl == null) {
             return item.buildUpon().setUri("https://unresolved.invalid/${item.mediaId}").build()

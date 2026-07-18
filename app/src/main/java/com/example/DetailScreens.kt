@@ -9,14 +9,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -44,12 +52,11 @@ fun AlbumDetailScreen(
         onPlayTrack = onPlayTrack,
         onBack = onBack,
         emoji = "💿",
+        showDownloadButton = false,
         modifier = modifier
     )
 }
 
-/** Real top-tracks list for an artist search result, fetched via [JioSaavnProvider.getArtistTracks]
- * or [YouTubeMusicProvider.getArtistTracks] depending on [ArtistResult.sourceType]. */
 @Composable
 fun ArtistDetailScreen(
     artist: ArtistResult,
@@ -58,19 +65,265 @@ fun ArtistDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    TracklistDetailScreen(
-        title = artist.name,
-        subtitle = "Top Songs",
-        imageUrl = artist.imageUrl,
-        gradientSeed = artist.id,
-        sourceType = artist.sourceType,
-        fetchTracks = { provider(context, artist.sourceType).getArtistTracks(artist.id) },
-        onPlayTrack = onPlayTrack,
-        onBack = onBack,
-        emoji = "🎤",
-        shape = CircleShape,
-        modifier = modifier
-    )
+    val gradientColors = remember(artist.id) { MusicData.Gradients[(artist.id.hashCode() % MusicData.Gradients.size + MusicData.Gradients.size) % MusicData.Gradients.size] }
+    
+    var tracksState by remember { mutableStateOf<UiState<List<Track>>>(UiState.Loading) }
+    var detailsState by remember { mutableStateOf<UiState<ArtistDetails>>(UiState.Loading) }
+    var showFullAbout by remember { mutableStateOf(false) }
+
+    LaunchedEffect(artist.id) {
+        try {
+            val p = provider(context, artist.sourceType)
+            val fetchedTracks = p.getArtistTracks(artist.id).mapIndexed { index, result -> result.toPlayableTrack(gradientIndex = index) }
+            tracksState = UiState.Success(fetchedTracks)
+        } catch (e: Exception) {
+            tracksState = UiState.Error(e.message ?: "Failed to load tracks")
+        }
+    }
+    
+    LaunchedEffect(artist.id) {
+        try {
+            val p = provider(context, artist.sourceType)
+            val details = p.getArtistDetails(artist.id)
+            detailsState = UiState.Success(details)
+        } catch (e: Exception) {
+            detailsState = UiState.Error(e.message ?: "Failed to load details")
+        }
+    }
+
+    ThemedBackground(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 90.dp)
+        ) {
+            // Header Image
+            item {
+                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                    if (artist.imageUrl != null) {
+                        coil.compose.AsyncImage(
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(artist.imageUrl.replace("50x50", "500x500"))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Artist Cover",
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        // Gradient overlay for text readability
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                                    startY = 0.5f,
+                                    endY = Float.POSITIVE_INFINITY
+                                ))
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Brush.linearGradient(gradientColors)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🎤", fontSize = 100.sp)
+                        }
+                    }
+                    
+                    // Back button + Optional Share/Action
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    
+                    // Title at bottom of header
+                    Text(
+                        text = artist.name,
+                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(16.dp)
+                    )
+                }
+            }
+
+            // Artist Details (Chips, About, Buttons)
+            if (detailsState is UiState.Success) {
+                val details = (detailsState as UiState.Success<ArtistDetails>).data
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            details.subscribers?.let { subs ->
+                                androidx.compose.material3.SuggestionChip(
+                                    onClick = { },
+                                    label = { Text("$subs Subscribers", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    colors = androidx.compose.material3.SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f))
+                                )
+                            }
+                            val listeners = details.monthlyListeners ?: artist.listenerCount
+                            listeners?.let { l ->
+                                androidx.compose.material3.SuggestionChip(
+                                    onClick = { },
+                                    label = { Text("$l Monthly Listeners", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    colors = androidx.compose.material3.SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f))
+                                )
+                            }
+                        }
+
+                        if (!details.aboutText.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "About",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = details.aboutText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = if (showFullAbout) Int.MAX_VALUE else 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (!showFullAbout && details.aboutText.length > 100) {
+                                androidx.compose.material3.SuggestionChip(
+                                    onClick = { showFullAbout = true },
+                                    label = { Text("More") },
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            Button(
+                                onClick = { },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Subscribe", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Radio", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Top Songs Header
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Top songs",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    if (tracksState is UiState.Success) {
+                        IconButton(
+                            onClick = { 
+                                val tracks = (tracksState as UiState.Success).data
+                                if (tracks.isNotEmpty()) onPlayTrack(tracks.first(), tracks.shuffled())
+                            },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha=0.2f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Shuffle", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            // Top Songs List
+            when (val tState = tracksState) {
+                is UiState.Loading -> item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                is UiState.Error -> item {
+                    EmptySearchState(title = "Couldn't load tracks", message = tState.message)
+                }
+                is UiState.Success -> {
+                    if (tState.data.isEmpty()) {
+                        item { EmptySearchState(title = "No songs found", message = "") }
+                    } else {
+                        items(tState.data) { track ->
+                            val rowGradient = MusicData.Gradients[track.gradientIndex % MusicData.Gradients.size]
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onPlayTrack(track, tState.data) }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TrackArtwork(
+                                    imageUrl = track.imageUrl,
+                                    gradientColors = rowGradient,
+                                    modifier = Modifier.size(52.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Play Track",
+                                        tint = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = track.title,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = track.artist,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = track.duration,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Real tracklist for a playlist search result, fetched via [JioSaavnProvider.getPlaylistTracks]
@@ -83,16 +336,52 @@ fun PlaylistDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val libraryViewModel: LibraryViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val isSaved by libraryViewModel.observeIsPlaylistSaved(playlist.id).collectAsState(initial = false)
+
     TracklistDetailScreen(
         title = playlist.title,
         subtitle = playlist.subtitle,
         imageUrl = playlist.imageUrl,
         gradientSeed = playlist.id,
         sourceType = playlist.sourceType,
-        fetchTracks = { provider(context, playlist.sourceType).getPlaylistTracks(playlist.id) },
+        fetchTracks = {
+            if (playlist.id.startsWith("local_")) {
+                val json = PlaylistRepository.getInstance(context).getTracksJson(playlist.id)
+                if (json != null) {
+                    val moshi = com.squareup.moshi.Moshi.Builder().addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory()).build()
+                    val adapter = moshi.adapter<List<Track>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Track::class.java))
+                    val tracks = adapter.fromJson(json) ?: emptyList()
+                    tracks.map { track ->
+                        TrackResult(
+                            id = track.sourceId ?: track.title,
+                            title = track.title,
+                            artist = track.artist,
+                            duration = track.duration,
+                            source = track.sourceType?.name ?: "JioSaavn",
+                            sourceType = track.sourceType ?: MusicSource.JIOSAAVN,
+                            imageUrl = track.imageUrl,
+                            directStreamUrl = track.streamUrl
+                        )
+                    }
+                } else emptyList()
+            } else {
+                provider(context, playlist.sourceType).getPlaylistTracks(playlist.id)
+            }
+        },
         onPlayTrack = onPlayTrack,
         onBack = onBack,
         emoji = "🎵",
+        showDownloadButton = false,
+        headerAction = {
+            IconButton(onClick = { libraryViewModel.toggleSaveRemotePlaylist(playlist, isSaved) }) {
+                Icon(
+                    imageVector = if (isSaved) Icons.Default.Favorite else androidx.compose.material.icons.Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (isSaved) "Remove from Library" else "Add to Library",
+                    tint = if (isSaved) MaterialTheme.colorScheme.primary else Color.White
+                )
+            }
+        },
         modifier = modifier
     )
 }
@@ -112,18 +401,21 @@ private interface TracklistProvider {
     suspend fun getAlbumTracks(id: String): List<TrackResult>
     suspend fun getArtistTracks(id: String): List<TrackResult>
     suspend fun getPlaylistTracks(id: String): List<TrackResult>
+    suspend fun getArtistDetails(id: String): ArtistDetails
 }
 
 private class JioSaavnTracklistProvider(private val provider: JioSaavnProvider) : TracklistProvider {
     override suspend fun getAlbumTracks(id: String) = provider.getAlbumTracks(id)
     override suspend fun getArtistTracks(id: String) = provider.getArtistTracks(id)
     override suspend fun getPlaylistTracks(id: String) = provider.getPlaylistTracks(id)
+    override suspend fun getArtistDetails(id: String) = provider.getArtistDetails(id)
 }
 
 private class YouTubeMusicTracklistProvider(private val provider: YouTubeMusicProvider) : TracklistProvider {
     override suspend fun getAlbumTracks(id: String) = provider.getAlbumTracks(id)
     override suspend fun getArtistTracks(id: String) = provider.getArtistTracks(id)
     override suspend fun getPlaylistTracks(id: String) = provider.getPlaylistTracks(id)
+    override suspend fun getArtistDetails(id: String) = provider.getArtistDetails(id)
 }
 
 /** Shared shell for the three detail screens above: a header (art/title/subtitle/back button)
@@ -141,7 +433,9 @@ private fun TracklistDetailScreen(
     onPlayTrack: (Track, List<Track>) -> Unit,
     onBack: () -> Unit,
     emoji: String,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp),
+    shape: Shape = RoundedCornerShape(12.dp),
+    showDownloadButton: Boolean = true,
+    headerAction: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf<UiState<List<Track>>>(UiState.Loading) }
@@ -167,7 +461,8 @@ private fun TracklistDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_button")) {
                     Icon(
@@ -175,6 +470,9 @@ private fun TracklistDetailScreen(
                         contentDescription = "Back",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
+                }
+                if (headerAction != null) {
+                    headerAction()
                 }
             }
 
@@ -279,7 +577,7 @@ private fun TracklistDetailScreen(
                             )
                             // YouTube-sourced tracks stream via a fresh per-play resolve, not a
                             // fixed URL - same reason SongsResults hides this for them too.
-                            if (track.sourceType != MusicSource.YOUTUBE_MUSIC) {
+                            if (showDownloadButton && track.sourceType != MusicSource.YOUTUBE_MUSIC) {
                                 DownloadButton(track = track)
                             }
                         }

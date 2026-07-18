@@ -7,11 +7,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,13 +38,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun LibraryScreen(
     onPlayTrack: (Track, List<Track>) -> Unit,
+    onPlaylistClick: (PlaylistResult) -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    val tabTitles = listOf("Playlists", "Liked Songs", "Downloads", "Recently Played")
+    val tabTitles = listOf("Playlists", "Songs", "Albums", "Artists", "Local")
 
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var newPlaylistSource by remember { mutableStateOf("Empty") }
+    val playlistSources = listOf("Empty", "Liked Songs", "Downloads", "Online Search")
 
     val downloadViewModel: DownloadViewModel = viewModel()
     val downloadedTracks by downloadViewModel.downloadedTracks.collectAsState()
@@ -51,6 +64,30 @@ fun LibraryScreen(
     // When on, every track tab (Liked/Recently Played - Downloads is already downloads-only)
     // filters down to just what's actually playable offline.
     var offlineModeEnabled by remember { mutableStateOf(false) }
+
+    androidx.activity.compose.BackHandler(enabled = selectedTab != 0) {
+        selectedTab = 0
+    }
+
+    if (selectedTab == 1) {
+        LikedSongsScreen(onPlayTrack = onPlayTrack, onBack = { selectedTab = 0 })
+        return
+    } else if (selectedTab == 2) {
+        DownloadedSongsScreen(onPlayTrack = onPlayTrack, onBack = { selectedTab = 0 })
+        return
+    } else if (selectedTab == 3) {
+        CachedSongsScreen(onPlayTrack = onPlayTrack, onBack = { selectedTab = 0 })
+        return
+    } else if (selectedTab == 4) {
+        LocalSongsScreen(onPlayTrack = onPlayTrack, onBack = { selectedTab = 0 })
+        return
+    } else if (selectedTab == 5) {
+        StatsScreen(onBack = { selectedTab = 0 })
+        return
+    } else if (selectedTab == 6) {
+        HistoryScreen(onPlayTrack = onPlayTrack, onBack = { selectedTab = 0 })
+        return
+    }
 
     ThemedBackground(
         modifier = modifier.fillMaxSize()
@@ -71,221 +108,158 @@ fun LibraryScreen(
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Offline mode",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Switch(
-                        checked = offlineModeEnabled,
-                        onCheckedChange = { offlineModeEnabled = it },
-                        modifier = Modifier.testTag("library_offline_mode_switch")
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    IconButton(onClick = { selectedTab = 6 }, modifier = Modifier.size(24.dp)) {
+                        Icon(imageVector = androidx.compose.material.icons.Icons.Default.History, contentDescription = "History", tint = MaterialTheme.colorScheme.onBackground)
+                    }
+                    IconButton(onClick = { selectedTab = 5 }, modifier = Modifier.size(24.dp)) {
+                        Icon(imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.TrendingUp, contentDescription = "Stats", tint = MaterialTheme.colorScheme.onBackground)
+                    }
                 }
             }
 
-            // Scrollable Tab Row to accommodate all 4 tabs beautifully on all screens
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                edgePadding = 16.dp,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                },
-                divider = {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                },
-                modifier = Modifier.padding(bottom = 12.dp)
-            ) {
-                tabTitles.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                                )
-                            )
-                        },
-                        modifier = Modifier.testTag("library_tab_${title.lowercase().replace(" ", "_")}")
-                    )
-                }
-            }
-
-            // Tabs Content
+            // Top Filter Chips removed as requested
+            // Content
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                when (selectedTab) {
-                    0 -> {
-                        // Playlists Tab
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            // "+ New Playlist" Button
-                            Button(
-                                onClick = { showNewPlaylistDialog = true },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    .testTag("new_playlist_button"),
-                                contentPadding = PaddingValues(vertical = 14.dp)
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Icon",
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "New Playlist",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 90.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Quick Access Tiles
+                    val quickAccessTiles = listOf(
+                        "Liked" to Icons.Default.Favorite,
+                        "Downloaded" to Icons.Default.DownloadDone,
+                        "Cached" to Icons.Default.Sync,
+                        "Local" to Icons.Default.Folder
+                    )
+
+                    items(quickAccessTiles.size) { index ->
+                        val (title, icon) = quickAccessTiles[index]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    if (title == "Liked") selectedTab = 1
+                                    if (title == "Downloaded") selectedTab = 2
+                                    if (title == "Cached") selectedTab = 3
+                                    if (title == "Local") selectedTab = 4
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(icon, contentDescription = null, tint = if (title == "Liked") Color(0xFFFF8A8A) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                title,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // Playlists Header
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Playlists",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            IconButton(onClick = { showNewPlaylistDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "New Playlist",
+                                    tint = MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
+                    }
+
+                    // Playlists Grid View
+                    items(playlists, key = { it.id }) { playlist ->
+                        val isRemote = playlist.remoteId != null
+                        val gradientColors = MusicData.Gradients[(playlist.id % MusicData.Gradients.size.toLong()).toInt()]
+                        Column(
+                            modifier = Modifier
+                                .animateItem()
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val safeSubtitle = playlist.subtitle ?: if (isRemote) "" else "Local Playlist"
+                                    onPlaylistClick(
+                                        PlaylistResult(
+                                            id = if (isRemote) playlist.remoteId!! else "local_${playlist.id}",
+                                            title = playlist.name,
+                                            subtitle = safeSubtitle,
+                                            imageUrl = playlist.imageUrl,
+                                            songCount = null,
+                                            sourceType = if (playlist.sourceType != null) MusicSource.valueOf(playlist.sourceType) else MusicSource.JIOSAAVN
+                                        )
                                     )
                                 }
-                            }
-
-                            // Playlists List
-                            if (playlists.isEmpty()) {
-                                OfflineEmptyState(message = "No playlists yet. Tap + New Playlist to create one.")
+                                .testTag("library_playlist_card_${playlist.name.lowercase().replace(" ", "_")}"),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            if (isRemote && playlist.imageUrl != null) {
+                                TrackArtwork(
+                                    imageUrl = playlist.imageUrl,
+                                    gradientColors = gradientColors,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                ) {
+                                    Text("🎵", fontSize = 48.sp)
+                                }
                             } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Brush.linearGradient(gradientColors)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    items(playlists) { playlist ->
-                                        val gradientColors = MusicData.Gradients[(playlist.id % MusicData.Gradients.size).toInt()]
-
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { }
-                                                .padding(8.dp)
-                                                .testTag("library_playlist_row_${playlist.name.lowercase().replace(" ", "_")}"),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(56.dp)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(Brush.linearGradient(gradientColors)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text("🎵", fontSize = 24.sp)
-                                            }
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = playlist.name,
-                                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = "Playlist • By You • 0 Songs",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
+                                    Text("🎵", fontSize = 48.sp)
                                 }
                             }
-                        }
-                    }
-                    1 -> {
-                        // Liked Songs - real, Room-backed; filtered to downloaded-only when Offline mode is on
-                        val songs = likedSongs.filterOfflineIfNeeded(offlineModeEnabled, downloadedKeys)
-                        if (songs.isEmpty()) {
-                            OfflineEmptyState(message = "No liked songs yet. Tap the heart on a track to like it.")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(songs) { song ->
-                                    LibrarySongRow(
-                                        track = song,
-                                        queue = songs,
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.Favorite,
-                                                contentDescription = "Unlike",
-                                                tint = Color(0xFFFF2D55),
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .clickable { likedSongsViewModel.toggle(song) }
-                                            )
-                                        },
-                                        onPlayTrack = onPlayTrack
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    2 -> {
-                        // Downloads - real, Room-backed downloaded tracks; play straight from disk
-                        if (downloadedTracks.isEmpty()) {
-                            OfflineEmptyState(message = "Nothing downloaded yet. Download a track from Search or Now Playing.")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(downloadedTracks) { song ->
-                                    LibrarySongRow(
-                                        track = song,
-                                        queue = downloadedTracks,
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.DownloadDone,
-                                                contentDescription = "Downloaded",
-                                                tint = MusePrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        },
-                                        trailingContent = { DownloadButton(track = song, downloadViewModel = downloadViewModel) },
-                                        onPlayTrack = onPlayTrack
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    3 -> {
-                        // Recently Played - real playback history, same source as Home; filtered
-                        // to downloaded-only when Offline mode is on
-                        val songs = recentlyPlayed.filterOfflineIfNeeded(offlineModeEnabled, downloadedKeys)
-                        if (songs.isEmpty()) {
-                            OfflineEmptyState(message = "No recently played songs yet. Play a track to see it here.")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(songs) { song ->
-                                    LibrarySongRow(track = song, queue = songs, leadingIcon = null, onPlayTrack = onPlayTrack)
-                                }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = playlist.name,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (isRemote) {
+                                Text(
+                                    text = playlist.subtitle ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else {
+                                Text(
+                                    text = "Local Playlist",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -300,6 +274,7 @@ fun LibraryScreen(
             onDismissRequest = {
                 showNewPlaylistDialog = false
                 newPlaylistName = ""
+                newPlaylistSource = "Empty"
             },
             title = {
                 Text(
@@ -329,14 +304,47 @@ fun LibraryScreen(
                             .fillMaxWidth()
                             .testTag("dialog_new_playlist_input")
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Source",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    playlistSources.forEach { source ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { newPlaylistSource = source }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = newPlaylistSource == source,
+                                onClick = { newPlaylistSource = source },
+                                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = source, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        libraryViewModel.createPlaylist(newPlaylistName)
-                        showNewPlaylistDialog = false
-                        newPlaylistName = ""
+                        if (newPlaylistSource == "Online Search") {
+                            libraryViewModel.createPlaylist(newPlaylistName, "Empty")
+                            showNewPlaylistDialog = false
+                            newPlaylistName = ""
+                            newPlaylistSource = "Empty"
+                            onNavigateToSearch()
+                        } else {
+                            libraryViewModel.createPlaylist(newPlaylistName, newPlaylistSource)
+                            showNewPlaylistDialog = false
+                            newPlaylistName = ""
+                            newPlaylistSource = "Empty"
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.testTag("dialog_confirm_button")
@@ -349,6 +357,7 @@ fun LibraryScreen(
                     onClick = {
                         showNewPlaylistDialog = false
                         newPlaylistName = ""
+                        newPlaylistSource = "Empty"
                     },
                     modifier = Modifier.testTag("dialog_cancel_button")
                 ) {

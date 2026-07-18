@@ -100,6 +100,27 @@ class JioSaavnProvider : Provider<TrackResult> {
         (0 until list.length()).mapNotNull { i -> parseSong(list.optJSONObject(i)) }
     }
 
+    /** Fetches extra artist details like bio, followers. */
+    suspend fun getArtistDetails(artistId: String): ArtistDetails = withContext(Dispatchers.IO) {
+        val url = "${Api.BASE_URL}?__call=artist.getArtistPageDetails&_format=json&_marker=0" +
+            "&api_version=4&ctx=web6dot0&artistId=$artistId&n_song=0&n_album=0&page=1&category=&sort_order="
+        val details = fetchJson(url)
+        val followerCount = details.optString("follower_count")?.toLongOrNull()
+        val formattedFollowers = followerCount?.let {
+            if (it > 1_000_000) String.format("%.2fM", it / 1_000_000f)
+            else if (it > 1_000) String.format("%.1fK", it / 1_000f)
+            else it.toString()
+        }
+        val bio = details.optString("bio")?.takeIf { it.isNotBlank() && it != "null" }
+            ?.let { decodeHtmlEntities(it) }
+
+        ArtistDetails(
+            aboutText = bio,
+            subscribers = formattedFollowers,
+            monthlyListeners = null
+        )
+    }
+
     /**
      * JioSaavn's stream URL is already decrypted locally during [search] (it's embedded in the
      * search result, not fetched separately), so this is just a lookup - no network call.

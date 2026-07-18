@@ -1,5 +1,11 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,7 +19,15 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -26,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
@@ -36,9 +51,38 @@ fun SearchScreen(
     onPlaylistClick: (PlaylistResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf(0) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchMode by rememberSaveable { mutableStateOf("Online") }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
     val tabTitles = listOf("Songs", "Albums", "Artists", "Playlists")
+    
+    val context = LocalContext.current
+    var hasStoragePermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            }
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        hasStoragePermission = isGranted
+    }
+
+    val searchHistoryDao = remember { MuseFlowDatabase.getInstance(context).searchHistoryDao() }
+    val searchHistory by searchHistoryDao.observeRecentSearches().collectAsState(initial = emptyList())
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotBlank()) {
+            delay(1000)
+            searchHistoryDao.saveSearch(SearchHistoryEntity(searchQuery, System.currentTimeMillis()))
+        }
+    }
 
     ThemedBackground(
         modifier = modifier.fillMaxSize()
@@ -46,7 +90,10 @@ fun SearchScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Search Header
+            val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+
+            // Search Header (Simplified, maybe keep it?)
             Text(
                 text = "Search",
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
@@ -54,73 +101,107 @@ fun SearchScreen(
                 modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 12.dp)
             )
 
-            // Search Box
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("What do you want to listen to?", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search Icon",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear search",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent
-                ),
+            // Search Box and Mode Toggle
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                    .testTag("search_input_field")
-            )
-
-            // Category Tab Row
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                },
-                divider = {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                },
-                modifier = Modifier.padding(bottom = 12.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                tabTitles.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(if (searchMode == "Online") "Search online..." else "Search local files...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search Icon",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear search",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            )
-                        },
-                        modifier = Modifier.testTag("search_tab_${title.lowercase()}")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.Transparent
+                    ),
+                    interactionSource = interactionSource,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("search_input_field")
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = {
+                        if (searchMode == "Online") {
+                            searchMode = "On device"
+                            if (!hasStoragePermission) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                                } else {
+                                    permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                }
+                            }
+                        } else {
+                            searchMode = "Online"
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = if (searchMode == "Online") Icons.Default.Public else Icons.Default.Folder,
+                        contentDescription = "Toggle Search Mode",
+                        tint = MaterialTheme.colorScheme.primary
                     )
+                }
+            }
+
+            if (searchMode == "Online" && searchQuery.isNotBlank()) {
+                // Category Tab Row
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    divider = {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    },
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    tabTitles.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                )
+                            },
+                            modifier = Modifier.testTag("search_tab_${title.lowercase()}")
+                        )
+                    }
                 }
             }
 
@@ -130,11 +211,57 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                when (selectedTab) {
-                    0 -> SongsResults(searchQuery = searchQuery, onPlayTrack = onPlayTrack)
-                    1 -> AlbumsResults(searchQuery = searchQuery, onAlbumClick = onAlbumClick)
-                    2 -> ArtistsResults(searchQuery = searchQuery, onArtistClick = onArtistClick)
-                    3 -> PlaylistsResults(searchQuery = searchQuery, onPlaylistClick = onPlaylistClick)
+                if (searchQuery.isBlank()) {
+                    if (isFocused && searchHistory.isNotEmpty()) {
+                        SearchHistoryList(
+                            history = searchHistory.take(6),
+                            onQuerySelect = { searchQuery = it },
+                            onClearEntry = { coroutineScope.launch { searchHistoryDao.deleteSearch(it.query) } },
+                            onClearAll = { coroutineScope.launch { searchHistoryDao.clearAll() } }
+                        )
+                    } else {
+                        EmptySearchState(
+                            title = "Search for a song",
+                            message = "Find any track, artist, or album to start listening."
+                        )
+                    }
+                } else {
+                    if (searchMode == "Online") {
+                        when (selectedTab) {
+                            0 -> SongsResults(searchQuery = searchQuery, searchMode = searchMode, onPlayTrack = onPlayTrack)
+                            1 -> AlbumsResults(searchQuery = searchQuery, onAlbumClick = onAlbumClick)
+                            2 -> ArtistsResults(searchQuery = searchQuery, onArtistClick = onArtistClick)
+                            3 -> PlaylistsResults(searchQuery = searchQuery, onPlaylistClick = onPlaylistClick)
+                        }
+                    } else {
+                        if (!hasStoragePermission) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    "Storage permission is required to search local files.",
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                                        } else {
+                                            permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("Grant Permission", color = MaterialTheme.colorScheme.onPrimary)
+                                }
+                            }
+                        } else {
+                            SongsResults(searchQuery = searchQuery, searchMode = searchMode, onPlayTrack = onPlayTrack)
+                        }
+                    }
                 }
             }
         }
@@ -144,57 +271,72 @@ fun SearchScreen(
 @Composable
 fun SongsResults(
     searchQuery: String,
+    searchMode: String = "Online",
     onPlayTrack: (Track, List<Track>) -> Unit
 ) {
     val context = LocalContext.current
     val jioSaavnProvider = remember { JioSaavnProvider() }
     val youTubeProvider = remember { YouTubeMusicProvider(context) }
+    val localAudioProvider = remember { LocalAudioProvider(context) }
     var state by remember { mutableStateOf<UiState<List<Track>>>(UiState.Loading) }
 
-    LaunchedEffect(searchQuery) {
+    val likedSongsViewModel: LikedSongsViewModel = viewModel()
+    val likedKeys by likedSongsViewModel.likedKeys.collectAsState()
+
+    LaunchedEffect(searchQuery, searchMode) {
         if (searchQuery.isBlank()) {
             state = UiState.Loading
             return@LaunchedEffect
         }
         state = UiState.Loading
         delay(350) // debounce so we don't fire a search per keystroke
-        var jioFailed = false
-        var ytFailed = false
-        // JioSaavn and YouTube Music are queried in parallel - neither should have to wait on
-        // the other - and each is individually bounded so a slow one can't hold the whole search
-        // "loading" forever; timing out counts the same as that source throwing.
-        val (jioResults, ytResults) = coroutineScope {
-            val jioDeferred = async {
-                withTimeoutOrNull(DEFAULT_LOAD_TIMEOUT_MS) {
-                    try {
-                        // Unlike YouTube results (never directly playable, resolved on tap
-                        // instead), a JioSaavn row is only worth showing if it's actually
-                        // playable - a small fraction fail DES decryption and come back null.
-                        jioSaavnProvider.search(searchQuery).filter { it.directStreamUrl != null }
-                    } catch (e: Exception) {
-                        null
-                    }
-                } ?: run { jioFailed = true; emptyList() }
+        
+        if (searchMode == "On device") {
+            try {
+                val results = localAudioProvider.search(searchQuery).mapIndexed { index, result -> result.toPlayableTrack(gradientIndex = index) }
+                state = UiState.Success(results)
+            } catch (e: Exception) {
+                state = UiState.Error("Failed to search local device.")
             }
-            val ytDeferred = async {
-                withTimeoutOrNull(DEFAULT_LOAD_TIMEOUT_MS) {
-                    try {
-                        youTubeProvider.search(searchQuery)
-                    } catch (e: Exception) {
-                        null
-                    }
-                } ?: run { ytFailed = true; emptyList() }
-            }
-            jioDeferred.await() to ytDeferred.await()
-        }
-        val merged = mergeSearchResults(jioResults, ytResults)
-            .mapIndexed { index, result -> result.toPlayableTrack(gradientIndex = index) }
-        // Only a genuine failure (both sources unreachable or timed out) counts as an error
-        // state - one source failing while the other succeeds should just show partial results.
-        state = if (jioFailed && ytFailed) {
-            UiState.Error("Couldn't reach JioSaavn or YouTube Music. Check your connection and try again.")
         } else {
-            UiState.Success(merged)
+            var jioFailed = false
+            var ytFailed = false
+            // JioSaavn and YouTube Music are queried in parallel - neither should have to wait on
+            // the other - and each is individually bounded so a slow one can't hold the whole search
+            // "loading" forever; timing out counts the same as that source throwing.
+            val (jioResults, ytResults) = coroutineScope {
+                val jioDeferred = async {
+                    withTimeoutOrNull(DEFAULT_LOAD_TIMEOUT_MS) {
+                        try {
+                            // Unlike YouTube results (never directly playable, resolved on tap
+                            // instead), a JioSaavn row is only worth showing if it's actually
+                            // playable - a small fraction fail DES decryption and come back null.
+                            jioSaavnProvider.search(searchQuery).filter { it.directStreamUrl != null }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } ?: run { jioFailed = true; emptyList() }
+                }
+                val ytDeferred = async {
+                    withTimeoutOrNull(DEFAULT_LOAD_TIMEOUT_MS) {
+                        try {
+                            youTubeProvider.search(searchQuery)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } ?: run { ytFailed = true; emptyList() }
+                }
+                jioDeferred.await() to ytDeferred.await()
+            }
+            val merged = mergeSearchResults(jioResults, ytResults)
+                .mapIndexed { index, result -> result.toPlayableTrack(gradientIndex = index) }
+            // Only a genuine failure (both sources unreachable or timed out) counts as an error
+            // state - one source failing while the other succeeds should just show partial results.
+            state = if (jioFailed && ytFailed) {
+                UiState.Error("Couldn't reach JioSaavn or YouTube Music. Check your connection and try again.")
+            } else {
+                UiState.Success(merged)
+            }
         }
     }
 
@@ -219,12 +361,13 @@ fun SongsResults(
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(results) { track ->
+            items(results, key = { it.downloadKey() }) { track ->
                 val gradientColors = MusicData.Gradients[track.gradientIndex % MusicData.Gradients.size]
                 val isFromYouTube = track.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         // YouTube tracks play directly now, same as JioSaavn - PlaybackService
@@ -276,6 +419,15 @@ fun SongsResults(
                             }
                         }
                     }
+                    val isLiked = likedKeys.contains(track.downloadKey())
+                    IconButton(onClick = { likedSongsViewModel.toggle(track) }) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isLiked) "Unlike" else "Like",
+                            tint = if (isLiked) Color(0xFFFF8A8A) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     Text(
                         text = track.duration,
                         style = MaterialTheme.typography.bodySmall,
@@ -354,12 +506,13 @@ fun AlbumsResults(searchQuery: String, onAlbumClick: (AlbumResult) -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data) { album ->
+            items(currentState.data, key = { it.id }) { album ->
                 val gradientColors = MusicData.Gradients[(album.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = album.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onAlbumClick(album) }
@@ -471,12 +624,13 @@ fun ArtistsResults(searchQuery: String, onArtistClick: (ArtistResult) -> Unit) {
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data) { artist ->
+            items(currentState.data, key = { it.id }) { artist ->
                 val gradientColors = MusicData.Gradients[(artist.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = artist.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onArtistClick(artist) }
@@ -580,12 +734,13 @@ fun PlaylistsResults(searchQuery: String, onPlaylistClick: (PlaylistResult) -> U
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(currentState.data) { playlist ->
+            items(currentState.data, key = { it.id }) { playlist ->
                 val gradientColors = MusicData.Gradients[(playlist.id.hashCode().mod(MusicData.Gradients.size))]
                 val isFromYouTube = playlist.sourceType == MusicSource.YOUTUBE_MUSIC
 
                 Row(
                     modifier = Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onPlaylistClick(playlist) }
@@ -663,5 +818,53 @@ fun EmptySearchState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+    }
+}
+
+@Composable
+fun SearchHistoryList(
+    history: List<SearchHistoryEntity>,
+    onQuerySelect: (String) -> Unit,
+    onClearEntry: (SearchHistoryEntity) -> Unit,
+    onClearAll: () -> Unit
+) {
+    if (history.isEmpty()) {
+        EmptySearchState(
+            title = "Search for a song",
+            message = "Find any track, artist, or album to start listening."
+        )
+    } else {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "Recent Searches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onClearAll) {
+                    Text("Clear All", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = 90.dp)
+            ) {
+                items(history) { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onQuerySelect(item.query) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(text = item.query, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        IconButton(onClick = { onClearEntry(item) }) {
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Remove", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

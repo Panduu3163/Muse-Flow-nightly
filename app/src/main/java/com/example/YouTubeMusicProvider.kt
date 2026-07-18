@@ -191,6 +191,34 @@ class YouTubeMusicProvider(context: Context) : Provider<TrackResult> {
         parseTrackShelfItems(shelfItems)
     }
 
+    /** Fetches extra artist details like bio, subscribers. */
+    suspend fun getArtistDetails(artistId: String): ArtistDetails = withContext(Dispatchers.IO) {
+        val root = browse(artistId)
+        val header = root.optJSONObject("header")
+            ?.optJSONObject("musicImmersiveHeaderRenderer")
+        
+        val descText = header?.optJSONObject("description")
+            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            
+        val subscriberText = header?.optJSONObject("subscriptionButton")
+            ?.optJSONObject("subscribeButtonRenderer")
+            ?.optJSONObject("subscriberCountText")
+            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?: header?.optJSONObject("subscriptionButton")
+            ?.optJSONObject("subscribeButtonRenderer")
+            ?.optJSONObject("subscriberCountWithSubscribeText")
+            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+
+        ArtistDetails(
+            aboutText = descText,
+            subscribers = subscriberText?.replace(" subscribers", "", ignoreCase = true)?.trim(),
+            monthlyListeners = null
+        )
+    }
+
     /** Fetches a playlist's full tracklist via a `browse` call on [playlistId] (the
      * `VL...`-style browseId from [searchPlaylists]'s [PlaylistResult.id]). */
     suspend fun getPlaylistTracks(playlistId: String): List<TrackResult> = withContext(Dispatchers.IO) {
@@ -483,10 +511,20 @@ class YouTubeMusicProvider(context: Context) : Provider<TrackResult> {
     private fun parseArtistRenderer(renderer: JSONObject): ArtistResult? {
         val browseId = browseIdOf(renderer) ?: return null
         val name = flexColumnFirstText(renderer, 0) ?: return null
+        
+        val subtitleParts = flexColumnRuns(renderer, 1)
+            ?.let { runs -> (1 until runs.length()).mapNotNull { runs.optJSONObject(it)?.optString("text")?.trim() } }
+            ?.filter { it.isNotBlank() && it != "•" }
+            ?: emptyList()
+        val listenerCount = subtitleParts.firstOrNull { it.contains("subscribers", ignoreCase = true) }?.let {
+            it.replace("subscribers", "listeners", ignoreCase = true)
+        }
+
         return ArtistResult(
             id = browseId,
             name = name,
             imageUrl = extractThumbnailUrl(renderer),
+            listenerCount = listenerCount,
             sourceType = MusicSource.YOUTUBE_MUSIC
         )
     }
