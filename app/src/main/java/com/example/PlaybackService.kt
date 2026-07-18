@@ -177,39 +177,57 @@ class PlaybackService : MediaSessionService() {
      */
     private suspend fun resolveMediaItem(item: MediaItem): MediaItem {
         if (item.localConfiguration != null) return item
-        val index = item.mediaId.toIntOrNull()
-        val track = index?.let { MusicData.tracks.getOrNull(it) }
-        val resolved = track?.let { resolver.resolve(it) }
+        
+        val title = item.mediaMetadata.title?.toString() ?: ""
+        val artist = item.mediaMetadata.artist?.toString() ?: ""
+        val album = item.mediaMetadata.albumTitle?.toString() ?: ""
+        
+        // Construct a temporary track using metadata so TrackStreamResolver can search JioSaavn.
+        // This avoids hardcoding MusicData.tracks which breaks for Liked Songs or other dynamic queues.
+        val tempTrack = Track(
+            title = title,
+            artist = artist,
+            album = album,
+            duration = "",
+            plays = "",
+            gradientIndex = 0,
+            imageUrl = item.mediaMetadata.artworkUri?.toString(),
+            streamUrl = null,
+            sourceType = null,
+            sourceId = null
+        )
+        
+        val resolved = resolver.resolve(tempTrack)
         val streamUrl = resolved?.directStreamUrl
 
-        if (track != null) {
+        if (title.isNotEmpty() && artist.isNotEmpty()) {
             serviceScope.launch(Dispatchers.IO) {
                 MuseFlowDatabase.getInstance(this@PlaybackService).cachedTrackDao().record(
                     CachedTrackEntity(
-                        key = track.downloadKey(),
-                        title = track.title,
-                        artist = track.artist,
-                        album = track.album,
-                        duration = track.duration,
-                        gradientIndex = track.gradientIndex,
-                        imageUrl = track.imageUrl,
+                        key = tempTrack.downloadKey(),
+                        title = title,
+                        artist = tempTrack.artist,
+                        album = tempTrack.album,
+                        duration = tempTrack.duration,
+                        gradientIndex = tempTrack.gradientIndex,
+                        imageUrl = tempTrack.imageUrl,
                         streamUrl = streamUrl,
                         cachedAt = System.currentTimeMillis(),
-                        sourceId = track.sourceId,
-                        sourceType = track.sourceType?.name
+                        sourceId = null,
+                        sourceType = null
                     )
                 )
             }
         }
 
-        if (track == null || streamUrl == null) {
+        if (streamUrl == null) {
             return item.buildUpon().setUri("https://unresolved.invalid/${item.mediaId}").build()
         }
 
         val metadata = item.mediaMetadata.buildUpon()
-            .setTitle(track.title)
-            .setArtist(track.artist)
-            .setAlbumTitle(track.album)
+            .setTitle(tempTrack.title)
+            .setArtist(tempTrack.artist)
+            .setAlbumTitle(tempTrack.album)
             .apply { resolved.imageUrl?.let { setArtworkUri(it.toUri()) } }
             .build()
 
@@ -233,12 +251,9 @@ class PlaybackService : MediaSessionService() {
     // playback outright in that case is strictly better than leaving it invisible.
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player ?: return
-        val isActivelyPlaying = player.playWhenReady && player.mediaItemCount > 0
-        val canShowNotification = NotificationManagerCompat.from(this).areNotificationsEnabled()
-        if (!isActivelyPlaying || !canShowNotification) {
-            player.stop()
-            stopSelf()
-        }
+        player.pause()
+        player.stop()
+        stopSelf()
     }
 
     override fun onDestroy() {

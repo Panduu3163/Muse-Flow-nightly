@@ -178,6 +178,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun syncStateFromController(controller: MediaController) {
+        if (activeQueue.isEmpty() && controller.mediaItemCount > 0) {
+            val newQueue = (0 until controller.mediaItemCount).mapNotNull { i ->
+                val item = controller.getMediaItemAt(i)
+                Track(
+                    title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                    artist = item.mediaMetadata.artist?.toString() ?: "Unknown",
+                    album = item.mediaMetadata.albumTitle?.toString() ?: "",
+                    duration = "",
+                    plays = "",
+                    gradientIndex = i % MusicData.Gradients.size,
+                    imageUrl = item.mediaMetadata.artworkUri?.toString(),
+                    streamUrl = null,
+                    sourceType = null,
+                    sourceId = null
+                )
+            }
+            activeQueue = newQueue
+        }
+
         val index = controller.currentMediaItem?.mediaId?.toIntOrNull()
         val track = index?.let { activeQueue.getOrNull(it) }
         val duration = controller.duration

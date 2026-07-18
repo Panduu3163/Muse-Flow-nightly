@@ -69,12 +69,21 @@ class YouTubeMusicProvider(context: Context) : Provider<TrackResult> {
         const val SINGLE = "Single"
         const val ARTIST = "Artist"
         const val PLAYLIST = "Playlist"
+        const val SONG = "Song"
+        const val VIDEO = "Video"
     }
 
     class YouTubeMusicException(message: String) : Exception(message)
 
     /** Searches YouTube Music for songs matching [query]. Runs on [Dispatchers.IO]. */
     override suspend fun search(query: String): List<TrackResult> = withContext(Dispatchers.IO) {
+        // First try the unfiltered search which catches lyric matches and top results.
+        // YouTube often omits or downranks exact lyric matches if we strictly use the "Song" filter chip.
+        val topResults = searchAllCategories(query)
+            .filter { categoryOf(it) in setOf(Category.SONG, Category.VIDEO, null) }
+            .mapNotNull { parseSongRenderer(it) }
+
+        // We also do the explicit song search to get a full list of song results.
         val requestBody = JSONObject().apply {
             put("context", buildContext(Client.WEB_REMIX_NAME, Client.WEB_REMIX_VERSION))
             put("query", query)
@@ -89,17 +98,30 @@ class YouTubeMusicProvider(context: Context) : Provider<TrackResult> {
             userAgent = Client.WEB_REMIX_USER_AGENT
         )
 
-        parseSearchResults(responseJson).map {
-            TrackResult(
-                id = it.videoId,
-                title = it.title,
-                artist = it.artist,
-                duration = it.duration,
-                source = name,
-                sourceType = MusicSource.YOUTUBE_MUSIC,
-                imageUrl = it.thumbnailUrl
-            )
+        val explicitSongs = parseSearchResults(responseJson)
+        
+        // Merge them, prioritizing the topResults (which contain the lyric matches)
+        val uniqueVideoIds = mutableSetOf<String>()
+        val finalResults = mutableListOf<TrackResult>()
+        
+        for (item in topResults + explicitSongs) {
+            val videoId = item.videoId ?: continue
+            if (uniqueVideoIds.add(videoId)) {
+                finalResults.add(
+                    TrackResult(
+                        id = videoId,
+                        title = item.title,
+                        artist = item.artist,
+                        duration = item.duration,
+                        source = name,
+                        sourceType = MusicSource.YOUTUBE_MUSIC,
+                        imageUrl = item.thumbnailUrl
+                    )
+                )
+            }
         }
+        
+        finalResults
     }
 
     /**
@@ -393,6 +415,11 @@ class YouTubeMusicProvider(context: Context) : Provider<TrackResult> {
             for (k in 0 until subtitleRuns.length()) {
                 val text = subtitleRuns.optJSONObject(k)?.optString("text")?.trim() ?: continue
                 if (text.isBlank() || text == "•") continue
+                
+                // Unfiltered search results prefix rows with their category (e.g. "Song • Artist").
+                // We must skip this prefix so we don't accidentally parse "Song" as the artist.
+                if (k == 0 && (text.equals(Category.SONG, ignoreCase = true) || text.equals(Category.VIDEO, ignoreCase = true))) continue
+                
                 if (durationPattern.matches(text)) {
                     duration = text
                 } else if (artist == null) {

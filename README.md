@@ -9,7 +9,7 @@ Built with Kotlin, Jetpack Compose, and Media3 — a personal project aiming for
 ![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin)
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-v1.0.9%20Beta-orange?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-v1.1.0%20Beta-orange?style=for-the-badge)
 
 </div>
 
@@ -105,7 +105,7 @@ Also thanks to the tester **Md Sakib Rahman** for testing and finding bugs.
 
 ## 📦 Getting the App
 
-Download the latest `museflow_nightly_1.0.9_beta.apk` from the Releases section or build it yourself:
+Download the latest `museflow_nightly_1.1.0_beta.apk` from the Releases section or build it yourself:
 
 **Prerequisites:** Android Studio (or the Android SDK + JDK 17+ directly), Kotlin 2.2+
 

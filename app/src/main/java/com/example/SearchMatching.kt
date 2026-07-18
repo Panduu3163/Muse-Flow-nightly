@@ -54,34 +54,85 @@ fun isLikelyMatch(aTitle: String, aArtist: String, bTitle: String, bArtist: Stri
     return titleSim >= 0.82 && artistSim >= 0.5
 }
 
-/** Merges JioSaavn and YouTube Music song search results into one list: JioSaavn results first
- * (they're already directly playable), followed by only the YouTube results that don't plausibly
- * duplicate one of them. A YouTube-only result stays in the list - it just needs to be resolved
- * to a JioSaavn match before it can actually be played; see [findPlayableMatch]. */
+/** Merges JioSaavn and YouTube Music song search results into one list.
+ * Prioritizes YouTube Music's superior search ranking algorithm to ensure the most accurate
+ * intent-matched results appear at the top. If a YouTube track has a playable JioSaavn equivalent,
+ * it swaps it in at the YouTube track's position for instant playability. */
 fun mergeSearchResults(jioSaavnResults: List<TrackResult>, youTubeResults: List<TrackResult>): List<TrackResult> {
-    val uniqueYouTube = youTubeResults.filter { yt ->
-        jioSaavnResults.none { jio -> isLikelyMatch(jio.title, jio.artist, yt.title, yt.artist) }
+    val merged = mutableListOf<TrackResult>()
+    val usedJioIndices = mutableSetOf<Int>()
+    
+    // 1. Base the primary order on YouTube Music's highly accurate rankings.
+    for (yt in youTubeResults) {
+        val jioMatchIndex = jioSaavnResults.indexOfFirst { jio ->
+            !usedJioIndices.contains(jioSaavnResults.indexOf(jio)) && 
+            isLikelyMatch(jio.title, jio.artist, yt.title, yt.artist)
+        }
+        
+        if (jioMatchIndex != -1) {
+            merged.add(jioSaavnResults[jioMatchIndex])
+            usedJioIndices.add(jioMatchIndex)
+        } else {
+            merged.add(yt)
+        }
     }
-    return jioSaavnResults + uniqueYouTube
+    
+    // 2. Append any remaining JioSaavn tracks that didn't match a top YouTube result.
+    for ((index, jio) in jioSaavnResults.withIndex()) {
+        if (!usedJioIndices.contains(index)) {
+            merged.add(jio)
+        }
+    }
+    
+    return merged
 }
 
-/** Merges JioSaavn and YouTube Music album search results the same way [mergeSearchResults]
- * merges songs: JioSaavn first, then only the YouTube albums that don't plausibly duplicate one
- * of them (by title + artist). */
+/** Merges JioSaavn and YouTube Music album search results prioritizing YouTube rankings. */
 fun mergeAlbumResults(jioSaavnResults: List<AlbumResult>, youTubeResults: List<AlbumResult>): List<AlbumResult> {
-    val uniqueYouTube = youTubeResults.filter { yt ->
-        jioSaavnResults.none { jio -> isLikelyMatch(jio.title, jio.artist, yt.title, yt.artist) }
+    val merged = mutableListOf<AlbumResult>()
+    val usedJioIndices = mutableSetOf<Int>()
+    for (yt in youTubeResults) {
+        val jioMatchIndex = jioSaavnResults.indexOfFirst { jio ->
+            !usedJioIndices.contains(jioSaavnResults.indexOf(jio)) && 
+            isLikelyMatch(jio.title, jio.artist, yt.title, yt.artist)
+        }
+        if (jioMatchIndex != -1) {
+            merged.add(jioSaavnResults[jioMatchIndex])
+            usedJioIndices.add(jioMatchIndex)
+        } else {
+            merged.add(yt)
+        }
     }
-    return jioSaavnResults + uniqueYouTube
+    for ((index, jio) in jioSaavnResults.withIndex()) {
+        if (!usedJioIndices.contains(index)) {
+            merged.add(jio)
+        }
+    }
+    return merged
 }
 
-/** Merges JioSaavn and YouTube Music artist search results, de-duplicating by name only (an
- * artist has no separate "artist" field to also compare, unlike a song/album). */
+/** Merges JioSaavn and YouTube Music artist search results prioritizing YouTube rankings. */
 fun mergeArtistResults(jioSaavnResults: List<ArtistResult>, youTubeResults: List<ArtistResult>): List<ArtistResult> {
-    val uniqueYouTube = youTubeResults.filter { yt ->
-        jioSaavnResults.none { jio -> isLikelyMatch(jio.name, "", yt.name, "") }
+    val merged = mutableListOf<ArtistResult>()
+    val usedJioIndices = mutableSetOf<Int>()
+    for (yt in youTubeResults) {
+        val jioMatchIndex = jioSaavnResults.indexOfFirst { jio ->
+            !usedJioIndices.contains(jioSaavnResults.indexOf(jio)) && 
+            isLikelyMatch(jio.name, "", yt.name, "")
+        }
+        if (jioMatchIndex != -1) {
+            merged.add(jioSaavnResults[jioMatchIndex])
+            usedJioIndices.add(jioMatchIndex)
+        } else {
+            merged.add(yt)
+        }
     }
-    return jioSaavnResults + uniqueYouTube
+    for ((index, jio) in jioSaavnResults.withIndex()) {
+        if (!usedJioIndices.contains(index)) {
+            merged.add(jio)
+        }
+    }
+    return merged
 }
 
 /** Merges JioSaavn and YouTube Music playlist search results. Playlists are user/platform-curated
